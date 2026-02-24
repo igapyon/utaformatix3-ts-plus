@@ -135,6 +135,10 @@ function normalizeTimeSignatureStream(input: TimeSignature[]): TimeSignature[] {
       last.numerator = ts.numerator;
       last.denominator = ts.denominator;
     } else {
+      // Drop redundant entries that don't change the active signature.
+      if (last && last.numerator === ts.numerator && last.denominator === ts.denominator) {
+        continue;
+      }
       dedup.push({ ...ts });
     }
   }
@@ -193,7 +197,8 @@ function stabilizeImportedVsqxProject(project: Project, defaultLyric: string): {
   const tempos = normalizeTempoStream(project.tempos ?? []);
   const timeSignatures = normalizeTimeSignatureStream(project.timeSignatures ?? []);
   const ppq = Number.isFinite(project.ppq) && project.ppq > 0 ? Math.trunc(project.ppq) : 480;
-  const measurePrefix = Number.isFinite(project.measurePrefix) ? Math.max(0, Math.trunc(project.measurePrefix)) : 0;
+  // VSQX preMeasure is at least 1 in many writers; keep score numbering stable by shifting back one.
+  const measurePrefix = Number.isFinite(project.measurePrefix) ? Math.max(0, Math.trunc(project.measurePrefix) - 1) : 0;
 
   const normalizedIssues: VsqxToMusicXmlIssue[] = [];
   if (droppedInvalidNotes > 0) {

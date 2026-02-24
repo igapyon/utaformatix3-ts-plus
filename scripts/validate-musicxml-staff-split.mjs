@@ -27,7 +27,7 @@ async function main() {
 
   const xml = await readFile(inputPath, "utf8");
   const expectedTrackCount = countPartStaves(xml);
-  const vsqx = convertMusicXmlToVsqx(xml, { musicXml: { defaultLyric } });
+  const vsqx = convertMusicXmlToVsqx(xml, { musicXml: { defaultLyric }, splitPartStaves: true });
   const project = parseVsqx(vsqx, { defaultLyric });
 
   if (project.tracks.length !== expectedTrackCount) {

@@ -507,13 +507,19 @@ function chooseClef(track: Track): Clef {
   return { sign: "G", line: 2 };
 }
 
-function renderAttributes(measure: Measure, divisions: number, clef: Clef, keyFifths: number): string {
+function renderAttributes(
+  measure: Measure,
+  divisions: number,
+  clef: Clef,
+  keyFifths: number,
+  includeTimeSignature: boolean,
+): string {
   const ts = measure.timeSignature;
   return (
     `<attributes>` +
     `<divisions>${divisions}</divisions>` +
     `<key><fifths>${clampFifths(keyFifths)}</fifths></key>` +
-    `<time><beats>${ts.numerator}</beats><beat-type>${ts.denominator}</beat-type></time>` +
+    `${includeTimeSignature ? `<time><beats>${ts.numerator}</beats><beat-type>${ts.denominator}</beat-type></time>` : ""}` +
     `<clef><sign>${clef.sign}</sign><line>${clef.line}</line></clef>` +
     `</attributes>`
   );
@@ -866,7 +872,7 @@ export function generateMusicXmlFromProject(project: Project, options?: MusicXml
           const needsAttributes = measure.index === 0 || hasTimeSigChange || hasKeyChange;
           return (
             `<measure number="${measureNumberBase + measure.index}">` +
-            `${needsAttributes ? renderAttributes(measure, ppq, clef, keyFifths) : ""}` +
+            `${needsAttributes ? renderAttributes(measure, ppq, clef, keyFifths, measure.index === 0 || hasTimeSigChange) : ""}` +
             `${renderTempoDirections(measure, partTempos)}` +
             `${renderMeasureNotesWithKey(project, notes, measure, keyFifths)}` +
             `</measure>`

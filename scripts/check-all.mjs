@@ -9,6 +9,7 @@ const commands = [
   ["node", ["scripts/validate-musicxml-error-policy.mjs"]],
   ["node", ["scripts/validate-musicxml-unsupported-notation-policy.mjs"]],
   ["node", ["scripts/validate-musicxml-unsupported-notation-extras.mjs"]],
+  ["node", ["scripts/validate-musicxml-chord-onset.mjs"]],
   ["node", ["scripts/validate-mikuscore-adapter-hooks.mjs"]],
   ["node", ["scripts/validate-musicxml-golden.mjs", "check"]],
   ["node", ["scripts/validate-musicxml-semantics.mjs"]],
