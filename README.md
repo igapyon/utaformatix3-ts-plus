@@ -72,6 +72,7 @@
   - `convertVsqxToMusicXml`
   - `convertMusicXmlToVsqx`
   - `convertVsqxToMusicXml` では VSQX読込時に推定調号を `project.extras.musicxml.keyFifthsByTrack` として注入
+- 調号推定ロジックは `src/musicxml/KeyFifthsEstimator.ts` に共通化済み（converter / generator で共有）
 
 ## クイック変換（試験用）
 
@@ -91,6 +92,12 @@ VSQX fixture 一式を一括検証するスクリプト:
 
 ```bash
 node scripts/validate-vsqx-fixtures.mjs [fixturesRoot] [defaultLyric]
+```
+
+VSQX 変換のエラー/警告ポリシー（report API）のスモーク検証:
+
+```bash
+node scripts/validate-vsqx-error-policy.mjs
 ```
 
 VSQX fixture から MusicXML ゴールデンを更新・比較するスクリプト:
@@ -115,6 +122,15 @@ MusicXML 出力の臨時記号ロジック（sharp/natural/小節リセット）
 node scripts/validate-musicxml-accidentals.mjs
 ```
 
+MusicXML 出力の歌詞音節（`<syllabic>`）ロジックを検証するスモークスクリプト:
+
+```bash
+node scripts/validate-musicxml-lyrics.mjs
+```
+
+`<syllabic>` のハイフン解釈は `project.japaneseLyricsType` が `RomajiCv` / `RomajiVcv` の場合に適用し、
+Kana系では歌詞テキストを優先して `single` として出力します。
+
 MusicXML 出力の調号指定ロジック（options / extras / 推定）を検証するスモークスクリプト:
 
 ```bash
@@ -129,9 +145,21 @@ node scripts/validate-musicxml-keyfifths.mjs
 - `keyFifths: number[]` でトラックごとに調号を指定
 - `keyFifthsByMeasure: number[][]` でトラック・小節ごとに調号を指定
 - `estimateKeyFifthsByMeasure: boolean` で小節ごとの推定調号を有効化
+  - 推定は小節間の連続性を考慮し、不要な調号ジャンプを抑制
+  - 単発・短尺ノートによる弱い根拠では前小節の調号を維持
 - `preferProjectExtras: true|false` で `project.extras` 由来設定の優先を制御
   - `true`（デフォルト）: `options.keyFifths` 未指定時に `project.extras` を参照
   - `false`: `project.extras` を無視して推定調号を使用
+
+## API メモ（エラー/警告）
+
+- `convertVsqxToMusicXml(vsqxText, options)`:
+  - 従来通り `string` を返す
+  - 失敗時は `Error` を throw
+- `convertVsqxToMusicXmlWithReport(vsqxText, options)`:
+  - `{ musicXml: string | null, issues: VsqxToMusicXmlIssue[] }` を返す
+  - `issues` に warning / error を蓄積して返す（非throwで扱いたい用途向け）
+  - VSQX parser の `importWarnings` も `VSQX_IMPORT_WARNING` として取り込む
 
 ## ライセンス
 

@@ -1,5 +1,5 @@
-import type { MusicXmlAdapter } from "./MusicXmlAdapter";
-import { MikuscoreMusicXmlAdapter } from "./MikuscoreMusicXmlAdapter";
+import type { MusicXmlAdapter } from "./MusicXmlAdapter.ts";
+import { MikuscoreMusicXmlAdapter } from "./MikuscoreMusicXmlAdapter.ts";
 
 let activeMusicXmlAdapter: MusicXmlAdapter = new MikuscoreMusicXmlAdapter();
 
@@ -12,5 +12,4 @@ export function setMusicXmlAdapter(adapter: MusicXmlAdapter): void {
 }
 
 export { MikuscoreMusicXmlAdapter };
-export type { MusicXmlAdapter, MusicXmlParseOptions, MusicXmlWriteMode, MusicXmlWriteOptions } from "./MusicXmlAdapter";
-
+export type { MusicXmlAdapter, MusicXmlParseOptions, MusicXmlWriteMode, MusicXmlWriteOptions } from "./MusicXmlAdapter.ts";
