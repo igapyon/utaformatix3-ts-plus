@@ -1,0 +1,5 @@
+{
+  "id": "musicxml_multipart_01",
+  "features": ["notes", "tempo", "timesig", "multi-part"],
+  "knownLimitations": []
+}

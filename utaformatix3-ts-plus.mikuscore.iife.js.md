@@ -24,6 +24,7 @@
 - `convertVsqxToMusicXml(vsqxText, options?) => string`
 - `convertVsqxToMusicXmlWithReport(vsqxText, options?) => { musicXml, issues }`
 - `convertMusicXmlToVsqx(musicXmlText, options?) => string`
+- `convertMusicXmlToVsqxWithReport(musicXmlText, options?) => { vsqx, issues }`
 - `getMusicXmlAdapter()`
 - `setMusicXmlAdapter(adapter)`
 - `MikuscoreMusicXmlAdapter`
@@ -61,6 +62,7 @@ window.__utaformatix3TsPlusMikuscoreHooks = {
 
 - フック名: `globalThis.__utaformatix3TsPlusMikuscoreHooks`
 - 利用される関数: `normalizeImportedMusicXmlText(xml: string): string`
+- 任意で `parseMusicXmlToProject(xml, options)` / `writeProjectToMusicXml(project, options)` も注入可能
 - フック未設定でも動作は継続する（内部フォールバックあり）
 
 ## 6. ビルド方法（utaformatix3-ts-plus 側）

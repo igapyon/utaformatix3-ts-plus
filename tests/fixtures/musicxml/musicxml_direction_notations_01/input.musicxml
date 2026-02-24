@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="2.0">
+  <part-list>
+    <score-part id="P1"><part-name>Lead</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <direction placement="above">
+        <direction-type><words>Intro</words></direction-type>
+        <sound tempo="100"/>
+      </direction>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>240</duration>
+        <tie type="start"/>
+        <voice>1</voice>
+        <type>eighth</type>
+        <staff>1</staff>
+        <notations>
+          <slur type="start" number="1"/>
+          <articulations><staccato/></articulations>
+          <tied type="start"/>
+        </notations>
+        <lyric><text>ら</text></lyric>
+      </note>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>240</duration>
+        <tie type="stop"/>
+        <voice>1</voice>
+        <type>eighth</type>
+        <staff>1</staff>
+        <notations>
+          <slur type="stop" number="1"/>
+          <fermata/>
+          <tied type="stop"/>
+        </notations>
+        <lyric><text>ら</text></lyric>
+      </note>
+      <note><rest/><duration>480</duration><voice>1</voice></note>
+    </measure>
+    <measure number="2">
+      <direction placement="below">
+        <direction-type><dynamics><mf/></dynamics></direction-type>
+      </direction>
+      <sound tempo="130"/>
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>960</duration>
+        <voice>1</voice>
+        <type>half</type>
+        <lyric><text>り</text></lyric>
+      </note>
+    </measure>
+  </part>
+</score-partwise>

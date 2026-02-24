@@ -1,0 +1,5 @@
+{
+  "id": "musicxml_defaults_warning_01",
+  "features": ["default-time-signature", "default-tempo", "rest"],
+  "knownLimitations": []
+}

@@ -1,0 +1,5 @@
+{
+  "id": "musicxml_tie_rest_tempo_01",
+  "features": ["notes", "tempo", "timesig", "rest", "tie"],
+  "knownLimitations": []
+}
