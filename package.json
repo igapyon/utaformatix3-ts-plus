@@ -5,7 +5,7 @@
   "scripts": {
     "check:all": "node scripts/check-all.mjs",
     "check:vsqx": "node scripts/validate-vsqx-error-policy.mjs && node scripts/validate-vsqx-fixtures.mjs && node scripts/validate-vsqx-golden.mjs check && node scripts/validate-vsqx-semantics.mjs",
-    "check:musicxml": "node scripts/validate-musicxml-error-policy.mjs && node scripts/validate-musicxml-unsupported-notation-policy.mjs && node scripts/validate-musicxml-unsupported-notation-extras.mjs && node scripts/validate-musicxml-golden.mjs check && node scripts/validate-musicxml-semantics.mjs",
+    "check:musicxml": "node scripts/validate-musicxml-error-policy.mjs && node scripts/validate-musicxml-unsupported-notation-policy.mjs && node scripts/validate-musicxml-unsupported-notation-extras.mjs && node scripts/validate-musicxml-golden.mjs check && node scripts/validate-musicxml-semantics.mjs && node scripts/validate-musicxml-staff-split.mjs",
     "check:roundtrip": "node scripts/validate-vsqx-roundtrip-diff.mjs upstream/utaformatix3-ts/tests/fixtures/vsqx あ check && node scripts/validate-musicxml-roundtrip-diff.mjs tests/fixtures/musicxml あ check"
   }
 }
