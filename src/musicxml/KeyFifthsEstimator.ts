@@ -11,19 +11,19 @@ type MeasureLike = {
 
 const SHARP_ORDER = ["F", "C", "G", "D", "A", "E", "B"] as const;
 const FLAT_ORDER = ["B", "E", "A", "D", "G", "C", "F"] as const;
-const PITCH_CANDIDATES: ReadonlyArray<{ step: string; alter: number }> = [
-  { step: "C", alter: 0 },
-  { step: "C", alter: 1 },
-  { step: "D", alter: 0 },
-  { step: "D", alter: 1 },
-  { step: "E", alter: 0 },
-  { step: "F", alter: 0 },
-  { step: "F", alter: 1 },
-  { step: "G", alter: 0 },
-  { step: "G", alter: 1 },
-  { step: "A", alter: 0 },
-  { step: "A", alter: 1 },
-  { step: "B", alter: 0 },
+const PITCH_CANDIDATES: ReadonlyArray<ReadonlyArray<{ step: string; alter: number }>> = [
+  [{ step: "C", alter: 0 }],
+  [{ step: "C", alter: 1 }, { step: "D", alter: -1 }],
+  [{ step: "D", alter: 0 }],
+  [{ step: "D", alter: 1 }, { step: "E", alter: -1 }],
+  [{ step: "E", alter: 0 }],
+  [{ step: "F", alter: 0 }],
+  [{ step: "F", alter: 1 }, { step: "G", alter: -1 }],
+  [{ step: "G", alter: 0 }],
+  [{ step: "G", alter: 1 }, { step: "A", alter: -1 }],
+  [{ step: "A", alter: 0 }],
+  [{ step: "A", alter: 1 }, { step: "B", alter: -1 }],
+  [{ step: "B", alter: 0 }],
 ];
 
 function clampFifths(value: number): number {
@@ -37,9 +37,20 @@ function defaultAlterFromFifths(step: string, fifths: number): number {
   return 0;
 }
 
-function toPitch(key: number): { step: string; alter: number } {
+function toPitchCandidates(key: number): ReadonlyArray<{ step: string; alter: number }> {
   const pitchClass = ((Math.trunc(key) % 12) + 12) % 12;
   return PITCH_CANDIDATES[pitchClass];
+}
+
+function scoreKeyAgainstFifths(key: number, fifths: number): number {
+  const candidates = toPitchCandidates(key);
+  let bestPenalty = Number.POSITIVE_INFINITY;
+  for (const pitch of candidates) {
+    const keyAlter = defaultAlterFromFifths(pitch.step, fifths);
+    const penalty = Math.abs(pitch.alter - keyAlter);
+    if (penalty < bestPenalty) bestPenalty = penalty;
+  }
+  return bestPenalty;
 }
 
 type MeasureNote = {
@@ -62,9 +73,7 @@ function collectMeasureNotes(notes: ReadonlyArray<NoteLike>, measure: MeasureLik
 function scoreMeasureNotesForFifths(inMeasure: ReadonlyArray<MeasureNote>, fifths: number): number {
   let penalty = 0;
   for (const item of inMeasure) {
-    const pitch = toPitch(item.key);
-    const keyAlter = defaultAlterFromFifths(pitch.step, fifths);
-    penalty += Math.abs(pitch.alter - keyAlter) * item.duration;
+    penalty += scoreKeyAgainstFifths(item.key, fifths) * item.duration;
   }
   return penalty;
 }
@@ -76,9 +85,7 @@ export function estimateTrackKeyFifths(notes: ReadonlyArray<Pick<NoteLike, "key"
   for (let fifths = -7; fifths <= 7; fifths += 1) {
     let penalty = 0;
     for (const note of notes) {
-      const pitch = toPitch(note.key);
-      const keyAlter = defaultAlterFromFifths(pitch.step, fifths);
-      penalty += Math.abs(pitch.alter - keyAlter);
+      penalty += scoreKeyAgainstFifths(note.key, fifths);
     }
     if (penalty < bestPenalty) {
       bestPenalty = penalty;
