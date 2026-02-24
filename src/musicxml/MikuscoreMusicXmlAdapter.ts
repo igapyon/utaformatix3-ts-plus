@@ -24,7 +24,7 @@ export class MikuscoreMusicXmlAdapter implements MusicXmlAdapter {
     const xml =
       mode === "preserve"
         ? writeLegacyMusicXml(project, { mode })
-        : generateMusicXmlFromProject(project);
+        : generateMusicXmlFromProject(project, options);
     return this.normalize(xml);
   }
 

@@ -3,6 +3,7 @@ import type { Project } from "../../upstream/utaformatix3-ts/src/core/model/Proj
 import type { Tempo } from "../../upstream/utaformatix3-ts/src/core/model/Tempo";
 import type { Track } from "../../upstream/utaformatix3-ts/src/core/model/Track";
 import type { TimeSignature } from "../../upstream/utaformatix3-ts/src/core/model/TimeSignature";
+import type { MusicXmlWriteOptions } from "./MusicXmlAdapter";
 
 type Measure = {
   index: number;
@@ -216,6 +217,160 @@ function estimateFifthsForTrack(track: Track): number {
     }
   }
   return bestFifths;
+}
+
+function estimateFifthsForMeasure(trackNotes: Note[], measure: Measure, fallbackFifths: number): number {
+  const notes = trackNotes
+    .map((note) => ({
+      key: note.key,
+      duration: Math.max(0, Math.min(note.tickOff, measure.startTick + measure.lengthTick) - Math.max(note.tickOn, measure.startTick)),
+    }))
+    .filter((it) => it.duration > 0);
+  if (notes.length === 0) return clampFifths(fallbackFifths);
+
+  let bestFifths = clampFifths(fallbackFifths);
+  let bestPenalty = Number.POSITIVE_INFINITY;
+  for (let fifths = -7; fifths <= 7; fifths += 1) {
+    let penalty = 0;
+    for (const item of notes) {
+      const pitch = toPitch(item.key);
+      const keyAlter = defaultAlterFromFifths(pitch.step, fifths);
+      penalty += Math.abs(pitch.alter - keyAlter) * item.duration;
+    }
+    const distancePenalty = Math.abs(fifths - fallbackFifths) * 0.01;
+    const scoredPenalty = penalty + distancePenalty;
+    if (scoredPenalty < bestPenalty) {
+      bestPenalty = scoredPenalty;
+      bestFifths = fifths;
+    }
+  }
+  return clampFifths(bestFifths);
+}
+
+function toFiniteNumberOrUndefined(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  return value;
+}
+
+function parseFifthsByTrackValue(value: unknown, index: number): number | undefined {
+  if (Array.isArray(value)) {
+    return toFiniteNumberOrUndefined(value[index]);
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return toFiniteNumberOrUndefined(record[String(index)]);
+  }
+  return undefined;
+}
+
+function parseFifthsByMeasureValue(value: unknown, trackIndex: number, measureIndex: number): number | undefined {
+  if (Array.isArray(value)) {
+    const trackValue = value[trackIndex];
+    if (!Array.isArray(trackValue)) return undefined;
+    return toFiniteNumberOrUndefined(trackValue[measureIndex]);
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const trackValue = record[String(trackIndex)];
+    if (!Array.isArray(trackValue)) return undefined;
+    return toFiniteNumberOrUndefined(trackValue[measureIndex]);
+  }
+  return undefined;
+}
+
+function resolveTrackFifthsFromExtras(project: Project, index: number): number | undefined {
+  const extras = project.extras;
+  if (!extras || typeof extras !== "object") return undefined;
+  const root = extras as Record<string, unknown>;
+  const musicxml = root.musicxml && typeof root.musicxml === "object" ? (root.musicxml as Record<string, unknown>) : null;
+
+  const byTrackCandidates: unknown[] = [
+    root.keyFifthsByTrack,
+    musicxml?.keyFifthsByTrack,
+  ];
+  for (const candidate of byTrackCandidates) {
+    const parsed = parseFifthsByTrackValue(candidate, index);
+    if (parsed !== undefined) return parsed;
+  }
+
+  const globalCandidates: unknown[] = [
+    root.keyFifths,
+    musicxml?.keyFifths,
+  ];
+  for (const candidate of globalCandidates) {
+    const parsed = toFiniteNumberOrUndefined(candidate);
+    if (parsed !== undefined) return parsed;
+  }
+  return undefined;
+}
+
+function resolveMeasureFifthsFromExtras(project: Project, trackIndex: number, measureIndex: number): number | undefined {
+  const extras = project.extras;
+  if (!extras || typeof extras !== "object") return undefined;
+  const root = extras as Record<string, unknown>;
+  const musicxml = root.musicxml && typeof root.musicxml === "object" ? (root.musicxml as Record<string, unknown>) : null;
+  const candidates: unknown[] = [
+    root.keyFifthsByMeasure,
+    musicxml?.keyFifthsByMeasure,
+  ];
+  for (const candidate of candidates) {
+    const parsed = parseFifthsByMeasureValue(candidate, trackIndex, measureIndex);
+    if (parsed !== undefined) return parsed;
+  }
+  return undefined;
+}
+
+function resolveTrackKeyFifths(
+  project: Project,
+  track: Track,
+  index: number,
+  options?: MusicXmlWriteOptions,
+): number {
+  const explicit = options?.keyFifths;
+  if (typeof explicit === "number" && Number.isFinite(explicit)) {
+    return clampFifths(explicit);
+  }
+  if (Array.isArray(explicit)) {
+    const perTrack = toFiniteNumberOrUndefined(explicit[index]);
+    if (perTrack !== undefined) return clampFifths(perTrack);
+  }
+
+  const preferProjectExtras = options?.preferProjectExtras ?? true;
+  if (preferProjectExtras) {
+    const fromExtras = resolveTrackFifthsFromExtras(project, index);
+    if (fromExtras !== undefined) return clampFifths(fromExtras);
+  }
+
+  return clampFifths(estimateFifthsForTrack(track));
+}
+
+function resolveMeasureKeyFifths(
+  project: Project,
+  trackIndex: number,
+  measureIndex: number,
+  trackNotes: Note[],
+  measure: Measure,
+  baseTrackFifths: number,
+  options?: MusicXmlWriteOptions,
+): number {
+  const explicitTrackLevel = options?.keyFifths;
+  if (explicitTrackLevel !== undefined) {
+    return clampFifths(baseTrackFifths);
+  }
+
+  const explicitByMeasure = options?.keyFifthsByMeasure;
+  const fromOptions = parseFifthsByMeasureValue(explicitByMeasure, trackIndex, measureIndex);
+  if (fromOptions !== undefined) return clampFifths(fromOptions);
+
+  const preferProjectExtras = options?.preferProjectExtras ?? true;
+  if (preferProjectExtras) {
+    const fromExtras = resolveMeasureFifthsFromExtras(project, trackIndex, measureIndex);
+    if (fromExtras !== undefined) return clampFifths(fromExtras);
+  }
+  if (options?.estimateKeyFifthsByMeasure) {
+    return estimateFifthsForMeasure(trackNotes, measure, baseTrackFifths);
+  }
+  return clampFifths(baseTrackFifths);
 }
 
 function choosePitchSpelling(key: number, context: SpellingContext): SpelledPitch {
@@ -614,27 +769,6 @@ function renderVoiceLane(
   return out;
 }
 
-function renderMeasureNotes(project: Project, trackNotes: Note[], measure: Measure): string {
-  const divisions = project.ppq > 0 ? project.ppq : 480;
-  const slices = sliceNotesForMeasure(trackNotes, measure);
-  const lanes = assignVoices(toClusters(slices));
-  if (lanes.length === 0) {
-    return renderRest(measure.lengthTick, 1, divisions);
-  }
-  if (lanes.length === 1) {
-    return renderVoiceLane(lanes[0], measure, divisions, 1, 0);
-  }
-
-  let out = "";
-  for (let i = 0; i < lanes.length; i += 1) {
-    out += renderVoiceLane(lanes[i], measure, divisions, i + 1, 0);
-    if (i < lanes.length - 1) {
-      out += `<backup><duration>${measure.lengthTick}</duration></backup>`;
-    }
-  }
-  return out;
-}
-
 function renderMeasureNotesWithKey(
   project: Project,
   trackNotes: Note[],
@@ -661,7 +795,7 @@ function renderMeasureNotesWithKey(
   return out;
 }
 
-export function generateMusicXmlFromProject(project: Project): string {
+export function generateMusicXmlFromProject(project: Project, options?: MusicXmlWriteOptions): string {
   const ppq = project.ppq > 0 ? project.ppq : 480;
   const measureNumberBase = Math.max(0, Math.trunc(project.measurePrefix || 0)) + 1;
   const tempos = normalizeTempos(project.tempos);
@@ -701,12 +835,18 @@ export function generateMusicXmlFromProject(project: Project): string {
       const partId = `P${index + 1}`;
       const partTempos = index === 0 ? tempos : [];
       const clef = chooseClef(track);
-      const keyFifths = estimateFifthsForTrack(track);
+      const trackKeyFifths = resolveTrackKeyFifths(project, track, index, options);
       const notes = [...track.notes].sort((a, b) => a.tickOn - b.tickOn || a.tickOff - b.tickOff);
       const measuresXml = measures
-        .map((measure) => {
+        .map((measure, measureIndex) => {
+          const keyFifths = resolveMeasureKeyFifths(project, index, measureIndex, notes, measure, trackKeyFifths, options);
+          const previousKeyFifths =
+            measureIndex > 0
+              ? resolveMeasureKeyFifths(project, index, measureIndex - 1, notes, measures[measureIndex - 1], trackKeyFifths, options)
+              : keyFifths;
+          const hasKeyChange = measureIndex === 0 || keyFifths !== previousKeyFifths;
           const hasTimeSigChange = tsList.some((ts) => ts.measurePosition === measure.index);
-          const needsAttributes = measure.index === 0 || hasTimeSigChange;
+          const needsAttributes = measure.index === 0 || hasTimeSigChange || hasKeyChange;
           return (
             `<measure number="${measureNumberBase + measure.index}">` +
             `${needsAttributes ? renderAttributes(measure, ppq, clef, keyFifths) : ""}` +
