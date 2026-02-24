@@ -56,6 +56,29 @@
 
 - 仕様整理・実装方針の確立フェーズ
 - まずは Phase 1 の定義と実装を進める
+- `src/musicxml` に `MusicXmlAdapter` の初期実装を追加済み（ブリッジ段階）
+  - `generate` は `src/musicxml/ProjectToMusicXml.ts` の自前生成 + `mikuscore` 正規化で出力
+  - 同時発音ノート（同一開始tick）は `<chord/>` として出力
+  - 重なりノート時は voice 自動割り当て + `<backup>` で複数voiceを出力
+  - 基本音価に加えて付点音価（1dot/2dot）で `<type>` と `<dot/>` を出力
+  - テンポは `<direction-type><metronome>` と `<sound tempo>` の両方で出力（第1パートに集約）
+  - テンポ列は正規化して出力（不正値除外、同tick統合、tick=0補完）
+  - `attributes` に `divisions/key/time/clef` を出力（clef はトラック音域から自動選択）
+  - `Project.measurePrefix` を小節番号オフセットに反映
+  - トラック0件でも最低1パートを自動補完して有効なMusicXMLを生成
+  - `preserve` は当面 `utaformatix3-ts` 既存実装を利用
+  - 最終的には `mikuscore` 依存を主軸とした入出力へ段階移行する
+- `src/converters` に双方向の入口を追加済み
+  - `convertVsqxToMusicXml`
+  - `convertMusicXmlToVsqx`
+
+## クイック変換（試験用）
+
+VSQX から MusicXML を試験変換するスクリプト:
+
+```bash
+node scripts/quick-convert-vsqx-to-musicxml.mjs <input.vsqx> <output.musicxml> [defaultLyric]
+```
 
 ## ライセンス
 
