@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="2.0">
+  <part-list>
+    <score-part id="P1"><part-name>Lead</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <sound tempo="120"/>
+      <note><rest/><duration>240</duration></note>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>240</duration>
+        <lyric><text>ら</text></lyric>
+      </note>
+    </measure>
+    <measure number="2">
+      <sound tempo="150"/>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>240</duration>
+        <tie type="start"/>
+        <lyric><text>り</text></lyric>
+      </note>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>240</duration>
+        <tie type="stop"/>
+        <lyric><text>り</text></lyric>
+      </note>
+    </measure>
+  </part>
+</score-partwise>

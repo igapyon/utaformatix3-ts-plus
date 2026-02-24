@@ -73,8 +73,25 @@
   - `convertMusicXmlToVsqx`
   - `convertVsqxToMusicXml` では VSQX読込時に推定調号を `project.extras.musicxml.keyFifthsByTrack` として注入
 - 調号推定ロジックは `src/musicxml/KeyFifthsEstimator.ts` に共通化済み（converter / generator で共有）
+- Phase 2 の `MusicXML -> VSQX` 仕様メモを `MUSICXML_TO_VSQX_SPEC.md` に追加済み
+- `VSQX -> MusicXML` 出力規則を `MUSICXML_OUTPUT_RULES.md` に追加済み
+- Phase 3 の roundtrip差分優先度分類を `ROUNDTRIP_DIFF_CLASSIFICATION.md` に追加済み
+- MusicXML 4.0 要素カバレッジ一覧を `MUSICXML_4_0_COVERAGE.md` に追加済み
+- 変換品質評価指標を `QUALITY_METRICS.md` に追加済み
+- VSQX input仕様メモを `VSQX_INPUT_SPEC.md` に追加済み
+- mikuscore参照ポイント一覧を `MIKUSCORE_REFERENCE_POINTS.md` に追加済み
+- MusicXmlAdapter境界定義を `MUSICXML_ADAPTER_BOUNDARY.md` に追加済み
+- mikuscore連携方針を `MIKUSCORE_INTEGRATION_PLAN.md` に追加済み
+- mikuscore改善候補バックログを `MIKUSCORE_IMPROVEMENT_BACKLOG.md` に追加済み
+- 同梱条件の再評価メモを `MIKUSCORE_BUNDLING_READINESS.md` に追加済み
 
 ## クイック変換（試験用）
+
+ローカル一括検証（推奨）:
+
+```bash
+npm run check:all
+```
 
 VSQX から MusicXML を試験変換するスクリプト:
 
@@ -100,6 +117,30 @@ VSQX 変換のエラー/警告ポリシー（report API）のスモーク検証:
 node scripts/validate-vsqx-error-policy.mjs
 ```
 
+MusicXML 変換のエラー/警告ポリシー（report API）のスモーク検証:
+
+```bash
+node scripts/validate-musicxml-error-policy.mjs
+```
+
+MusicXML 未対応記譜（slur/ornaments/articulations）の警告ポリシー検証:
+
+```bash
+node scripts/validate-musicxml-unsupported-notation-policy.mjs
+```
+
+MusicXML 未対応記譜の `retainedExtras` 退避検証:
+
+```bash
+node scripts/validate-musicxml-unsupported-notation-extras.mjs
+```
+
+`MikuscoreMusicXmlAdapter` のグローバルフック（normalize/parse/write）検証:
+
+```bash
+node scripts/validate-mikuscore-adapter-hooks.mjs
+```
+
 VSQX fixture から MusicXML ゴールデンを更新・比較するスクリプト:
 
 ```bash
@@ -110,11 +151,41 @@ node scripts/validate-vsqx-golden.mjs update [fixturesRoot] [goldenRoot] [defaul
 node scripts/validate-vsqx-golden.mjs check [fixturesRoot] [goldenRoot] [defaultLyric]
 ```
 
+MusicXML fixture から VSQX ゴールデンを更新・比較するスクリプト:
+
+```bash
+# 初回または意図した仕様変更時に更新
+node scripts/validate-musicxml-golden.mjs update [fixturesRoot] [goldenRoot] [defaultLyric]
+
+# 通常確認（差分があれば失敗）
+node scripts/validate-musicxml-golden.mjs check [fixturesRoot] [goldenRoot] [defaultLyric]
+```
+
 VSQX→MusicXML→再読込で主要情報（音高・長さ・歌詞・テンポ・拍子）を意味比較するスクリプト:
 
 ```bash
 node scripts/validate-vsqx-semantics.mjs [fixturesRoot] [defaultLyric]
 ```
+
+MusicXML→VSQX→再読込で主要情報（音高・長さ・歌詞・テンポ・拍子）を意味比較するスクリプト:
+
+```bash
+node scripts/validate-musicxml-semantics.mjs [fixturesRoot] [defaultLyric]
+```
+
+VSQX→MusicXML→VSQX の差分可視化（`report`）/ 検証（`check`）スクリプト:
+
+```bash
+node scripts/validate-vsqx-roundtrip-diff.mjs [fixturesRoot] [defaultLyric] [report|check]
+```
+
+MusicXML→VSQX→MusicXML の差分可視化（`report`）/ 検証（`check`）スクリプト:
+
+```bash
+node scripts/validate-musicxml-roundtrip-diff.mjs [fixturesRoot] [defaultLyric] [report|check]
+```
+
+両スクリプトは差分を `fatal / important / tolerable` に分類して集計表示します。
 
 MusicXML 出力の臨時記号ロジック（sharp/natural/小節リセット）を検証するスモークスクリプト:
 
@@ -136,6 +207,33 @@ MusicXML 出力の調号指定ロジック（options / extras / 推定）を検�
 ```bash
 node scripts/validate-musicxml-keyfifths.mjs
 ```
+
+## 既知制約と回避策
+
+- MusicXML `slur` / ornaments / articulation は現状未保持
+  - 回避策: roundtripで必要な記号は現状利用を避けるか、変換後にDAW/エディタ側で再付与する
+  - `convertMusicXmlToVsqxWithReport` では `MUSICXML_UNSUPPORTED_NOTATION` warning を返す
+- MusicXML の `key` / `clef` は `MusicXML -> VSQX` で可逆保持していない
+  - 回避策: `VSQX -> MusicXML` 出力時は options/extras による調号制御を利用する
+- `MusicXML -> VSQX` は lyric text を保持するが `syllabic` 種別は保持しない
+  - 回避策: 歌詞分割情報が必要なケースは MusicXML 側を正本として運用する
+- VSQX roundtrip のテキスト完全一致は保証しない（semantic一致を重視）
+  - 回避策: `validate-*-semantics` と `validate-*-roundtrip-diff` の `fatal/important` を品質ゲートに使う
+
+## 関連仕様ドキュメント
+
+- `MUSICXML_TO_VSQX_SPEC.md`
+- `MUSICXML_OUTPUT_RULES.md`
+- `VSQX_INPUT_SPEC.md`
+- `PHASE1_SCOPE_SPEC.md`
+- `MUSICXML_4_0_COVERAGE.md`
+- `ROUNDTRIP_DIFF_CLASSIFICATION.md`
+- `QUALITY_METRICS.md`
+- `MIKUSCORE_REFERENCE_POINTS.md`
+- `MUSICXML_ADAPTER_BOUNDARY.md`
+- `MIKUSCORE_INTEGRATION_PLAN.md`
+- `MIKUSCORE_IMPROVEMENT_BACKLOG.md`
+- `MIKUSCORE_BUNDLING_READINESS.md`
 
 ## API メモ（調号）
 
@@ -160,6 +258,14 @@ node scripts/validate-musicxml-keyfifths.mjs
   - `{ musicXml: string | null, issues: VsqxToMusicXmlIssue[] }` を返す
   - `issues` に warning / error を蓄積して返す（非throwで扱いたい用途向け）
   - VSQX parser の `importWarnings` も `VSQX_IMPORT_WARNING` として取り込む
+- `convertMusicXmlToVsqx(musicXmlText, options)`:
+  - 従来通り `string` を返す
+  - 失敗時は `Error` を throw
+- `convertMusicXmlToVsqxWithReport(musicXmlText, options)`:
+  - `{ vsqx: string | null, issues: MusicXmlToVsqxIssue[], retainedExtras?: Record<string, unknown> }` を返す
+  - `issues` に warning / error を蓄積して返す（非throwで扱いたい用途向け）
+  - MusicXML parse 時の `importWarnings` を `MUSICXML_IMPORT_WARNING` として取り込む
+  - 未対応記譜がある場合は `retainedExtras.musicxml.unsupportedNotations` に集約する
 
 ## ライセンス
 

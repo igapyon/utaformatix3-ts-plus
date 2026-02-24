@@ -4,30 +4,30 @@
 
 ## 0. 基盤整備
 
-- [ ] `README.md` / `ROADMAP.md` / `TODO.md` の相互整合を維持する
-- [ ] 開発用ディレクトリ構成（`src/`, `tests/`, `scripts/`）を確定する
-- [ ] ビルド・テスト実行基盤（TypeScript + test runner）を初期化する
+- [x] `README.md` / `ROADMAP.md` / `TODO.md` の相互整合を維持する（2026-02-25 時点の仕様反映）
+- [x] 開発用ディレクトリ構成（`src/`, `tests/`, `scripts/`）を確定する
+- [x] ビルド・テスト実行基盤（TypeScript + test runner）を初期化する（`package.json`, `scripts/check-all.mjs`）
 - [ ] CI の最小パイプライン（lint/typecheck/test）を構築する
-- [ ] `mikuscore` 参照ポイント（MusicXML入出力の対象ファイル/関数）を一覧化する
-- [ ] `MusicXmlAdapter` 境界インターフェース（`Project/UFData <-> MusicXML DOM`）を定義する
+- [x] `mikuscore` 参照ポイント（MusicXML入出力の対象ファイル/関数）を一覧化する（`MIKUSCORE_REFERENCE_POINTS.md`）
+- [x] `MusicXmlAdapter` 境界インターフェース（`Project/UFData <-> MusicXML DOM`）を定義する（`MUSICXML_ADAPTER_BOUNDARY.md`）
 
 ## 1. Phase 1: VSQX Import -> MusicXML 4.0 Export（最優先）
 
 ### 1-1. VSQX input 強化
 
-- [ ] VSQX パーサの対象仕様（バージョン・必須要素）を定義する
-- [ ] ノート、歌詞、テンポ、拍子、トラック構造の取り込みを安定化する
+- [x] VSQX パーサの対象仕様（バージョン・必須要素）を定義する（`VSQX_INPUT_SPEC.md`）
+- [x] ノート、歌詞、テンポ、拍子、トラック構造の取り込みを安定化する（`convertVsqxToMusicXmlWithReport` 内の正規化処理）
 - [x] VSQX読込時に推定調号を `project.extras.musicxml.keyFifthsByTrack` へ注入する
 - [x] 異常入力時のエラー/警告ポリシーを定義する（`convertVsqxToMusicXmlWithReport` 追加、`importWarnings` 取り込み）
 
 ### 1-2. MusicXML 4.0 output 強化
 
-- [ ] MusicXML 4.0 出力の最小スキーマ方針を定義する（`mikuscore` 活用前提）
-- [ ] 音価・タイ・休符・テンポ指示・拍子の出力規則を確定する
+- [x] MusicXML 4.0 出力の最小スキーマ方針を定義する（`MUSICXML_OUTPUT_RULES.md`）
+- [x] 音価・タイ・休符・テンポ指示・拍子の出力規則を確定する（`MUSICXML_OUTPUT_RULES.md`）
 - [x] 歌詞・音節（syllabic）出力方針を確定する（Romaji時のみハイフン規則 `begin/middle/end/single` を適用）
 - [x] 臨時記号（`<accidental>`）の基本出力と小節内状態管理を実装する
 - [x] 調号（`<key><fifths>`）の推定出力と臨時記号判定の連動を実装する
-- [ ] `mikuscore` の MusicXML I/O 呼び出しアダプタを試作する
+- [x] `mikuscore` の MusicXML I/O 呼び出しアダプタを試作する（global hooksで parse/write 連携、`scripts/validate-mikuscore-adapter-hooks.mjs`）
 
 ### 1-3. テスト
 
@@ -48,39 +48,43 @@
 
 ### 2-1. MusicXML 4.0 input 強化
 
-- [ ] 取り込み対象要素（part/measure/note/attributes/direction/notations）を明確化する
-- [ ] tie/slur/rest/chord の処理方針を定義する
-- [ ] 複数パートから VSQX トラックへの割り当て規則を定義する
+- [x] 取り込み対象要素（part/measure/note/attributes/direction/notations）を明確化する（`MUSICXML_TO_VSQX_SPEC.md`）
+- [x] tie/slur/rest/chord の処理方針を定義する（`MUSICXML_TO_VSQX_SPEC.md`）
+- [x] 複数パートから VSQX トラックへの割り当て規則を定義する（`MUSICXML_TO_VSQX_SPEC.md`）
 
 ### 2-2. VSQX output 強化
 
-- [ ] VSQX 出力の必須構造と既定値を定義する
-- [ ] Phase 1 と整合するデータ正規化ルールを適用する
+- [x] VSQX 出力の必須構造と既定値を定義する（`MUSICXML_TO_VSQX_SPEC.md`）
+- [x] Phase 1 と整合するデータ正規化ルールを適用する（`convertMusicXmlToVsqxWithReport` 内のfallback正規化）
 
 ### 2-3. テスト
 
-- [ ] MusicXML fixture セットを作成する（単純/複雑記譜/複数パート）
-- [ ] `MusicXML -> VSQX` のゴールデン比較テストを追加する
+- [x] MusicXML fixture セットを作成する（単純/複雑記譜/複数パート）
+- [x] `MusicXML -> VSQX` のゴールデン比較テストを追加する（`scripts/validate-musicxml-golden.mjs`）
+- [x] `MusicXML -> VSQX` の意味比較テストを追加する（`scripts/validate-musicxml-semantics.mjs`）
+- [x] `MusicXML -> VSQX` の error/warning レポートAPI検証を追加する（`scripts/validate-musicxml-error-policy.mjs`）
+- [x] `MusicXML -> VSQX` の未対応記譜warning検証を追加する（`scripts/validate-musicxml-unsupported-notation-policy.mjs`）
+- [x] `MusicXML -> VSQX` の未対応記譜 `retainedExtras` 退避検証を追加する（`scripts/validate-musicxml-unsupported-notation-extras.mjs`）
 
 ## 3. Phase 3: Round-trip 最適化
 
-- [ ] `VSQX -> MusicXML -> VSQX` 差分を可視化する
-- [ ] `MusicXML -> VSQX -> MusicXML` 差分を可視化する
-- [ ] 差分の優先度（致命/重要/許容）を分類する
-- [ ] 回帰を防ぐ fixture を追加する
+- [x] `VSQX -> MusicXML -> VSQX` 差分を可視化する（`scripts/validate-vsqx-roundtrip-diff.mjs`）
+- [x] `MusicXML -> VSQX -> MusicXML` 差分を可視化する（`scripts/validate-musicxml-roundtrip-diff.mjs`）
+- [x] 差分の優先度（致命/重要/許容）を分類する（`ROUNDTRIP_DIFF_CLASSIFICATION.md`）
+- [x] 回帰を防ぐ fixture を追加する（`tests/fixtures/musicxml/musicxml_defaults_warning_01`）
 
 ## 4. ドキュメント
 
-- [ ] 対応済み/未対応の MusicXML 4.0 要素一覧を作成する
-- [ ] 既知制約と回避策を `README.md` に追記する
-- [ ] 変換品質の評価指標（保持率、差分件数、失敗率）を定義する
+- [x] 対応済み/未対応の MusicXML 4.0 要素一覧を作成する（`MUSICXML_4_0_COVERAGE.md`）
+- [x] 既知制約と回避策を `README.md` に追記する
+- [x] 変換品質の評価指標（保持率、差分件数、失敗率）を定義する（`QUALITY_METRICS.md`）
 
 ## 5. mikuscore 連携準備（初期は統合しない）
 
-- [ ] `utaformatix3-ts-plus` から見た `mikuscore` 活用方針を文書化する
-- [ ] 実装中に見つけた `mikuscore` 改善候補を issue 下書きとして蓄積する
-- [ ] Phase 3 開始時に、同梱ライブラリ化の技術条件を再評価する
+- [x] `utaformatix3-ts-plus` から見た `mikuscore` 活用方針を文書化する（`MIKUSCORE_INTEGRATION_PLAN.md`）
+- [x] 実装中に見つけた `mikuscore` 改善候補を issue 下書きとして蓄積する（`MIKUSCORE_IMPROVEMENT_BACKLOG.md`）
+- [x] Phase 3 開始時に、同梱ライブラリ化の技術条件を再評価する（`MIKUSCORE_BUNDLING_READINESS.md`）
 
 ## 進行中（1つだけ）
 
-- [ ] Phase 1 の対象仕様（VSQX input / `mikuscore` 活用 MusicXML 4.0 output）を確定する
+- [x] Phase 1 の対象仕様（VSQX input / `mikuscore` 活用 MusicXML 4.0 output）を確定する（`PHASE1_SCOPE_SPEC.md`）

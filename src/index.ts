@@ -1,5 +1,6 @@
 export { convertVsqxToMusicXml, convertMusicXmlToVsqx } from "./converters/index.ts";
 export { convertVsqxToMusicXmlWithReport } from "./converters/index.ts";
+export { convertMusicXmlToVsqxWithReport } from "./converters/index.ts";
 export {
   getMusicXmlAdapter,
   setMusicXmlAdapter,
@@ -17,3 +18,9 @@ export type {
   VsqxToMusicXmlIssueLevel,
   VsqxToMusicXmlReport,
 } from "./converters/vsqxToMusicXml.ts";
+export type {
+  MusicXmlToVsqxIssue,
+  MusicXmlToVsqxIssueCode,
+  MusicXmlToVsqxIssueLevel,
+  MusicXmlToVsqxReport,
+} from "./converters/musicXmlToVsqx.ts";

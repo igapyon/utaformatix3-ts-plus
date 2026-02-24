@@ -5,6 +5,8 @@ import { generateMusicXmlFromProject } from "./ProjectToMusicXml.ts";
 
 type MikuscoreMusicXmlHooks = {
   normalizeImportedMusicXmlText?: (xml: string) => string;
+  parseMusicXmlToProject?: (xml: string, options?: MusicXmlParseOptions) => Project;
+  writeProjectToMusicXml?: (project: Project, options?: MusicXmlWriteOptions) => string;
 };
 
 function getGlobalHooks(): MikuscoreMusicXmlHooks {
@@ -73,6 +75,14 @@ function normalizeForOutput(xml: string): string {
 
 export class MikuscoreMusicXmlAdapter implements MusicXmlAdapter {
   public write(project: Project, options?: MusicXmlWriteOptions): string {
+    const hooks = getGlobalHooks();
+    if (typeof hooks.writeProjectToMusicXml === "function") {
+      try {
+        return this.normalize(hooks.writeProjectToMusicXml(project, options));
+      } catch {
+        // Fall back to built-in path for robustness.
+      }
+    }
     const mode = options?.mode ?? "generate";
     const xml =
       mode === "preserve"
@@ -83,6 +93,14 @@ export class MikuscoreMusicXmlAdapter implements MusicXmlAdapter {
 
   public parse(xml: string, options?: MusicXmlParseOptions): Project {
     const normalized = this.normalize(xml);
+    const hooks = getGlobalHooks();
+    if (typeof hooks.parseMusicXmlToProject === "function") {
+      try {
+        return hooks.parseMusicXmlToProject(normalized, options);
+      } catch {
+        // Fall back to built-in path for robustness.
+      }
+    }
     return parseLegacyMusicXml(normalized, {
       defaultLyric: options?.defaultLyric,
     });
