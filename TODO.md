@@ -28,9 +28,10 @@
 
 ### 1-3. テスト
 
-- [ ] VSQX fixture セットを作成する（最小/テンポ変化/拍子変化/複数トラック）
-- [ ] `VSQX -> MusicXML` のゴールデン比較テストを追加する
-- [ ] 主要情報（音高・長さ・歌詞・テンポ・拍子）の意味比較テストを追加する
+- [x] VSQX fixture セットを作成する（最小/テンポ変化/拍子変化/複数トラック）
+- [x] VSQX fixture を一括実行する簡易検証スクリプトを追加する（`scripts/validate-vsqx-fixtures.mjs`）
+- [x] `VSQX -> MusicXML` のゴールデン比較テストを追加する（`scripts/validate-vsqx-golden.mjs`）
+- [x] 主要情報（音高・長さ・歌詞・テンポ・拍子）の意味比較テストを追加する（`scripts/validate-vsqx-semantics.mjs`）
 
 ## 2. Phase 2: MusicXML 4.0 Import -> VSQX Export
 
