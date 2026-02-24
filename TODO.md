@@ -24,6 +24,7 @@
 - [ ] MusicXML 4.0 出力の最小スキーマ方針を定義する（`mikuscore` 活用前提）
 - [ ] 音価・タイ・休符・テンポ指示・拍子の出力規則を確定する
 - [ ] 歌詞・音節（syllabic）出力方針を確定する
+- [x] 臨時記号（`<accidental>`）の基本出力と小節内状態管理を実装する
 - [ ] `mikuscore` の MusicXML I/O 呼び出しアダプタを試作する
 
 ### 1-3. テスト
@@ -32,6 +33,7 @@
 - [x] VSQX fixture を一括実行する簡易検証スクリプトを追加する（`scripts/validate-vsqx-fixtures.mjs`）
 - [x] `VSQX -> MusicXML` のゴールデン比較テストを追加する（`scripts/validate-vsqx-golden.mjs`）
 - [x] 主要情報（音高・長さ・歌詞・テンポ・拍子）の意味比較テストを追加する（`scripts/validate-vsqx-semantics.mjs`）
+- [x] 臨時記号（sharp/natural/小節リセット）のスモーク検証を追加する（`scripts/validate-musicxml-accidentals.mjs`）
 
 ## 2. Phase 2: MusicXML 4.0 Import -> VSQX Export
 

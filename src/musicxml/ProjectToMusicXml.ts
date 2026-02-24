@@ -35,9 +35,33 @@ type DurationSpec = {
 };
 
 type AccidentalState = Map<string, number>;
+type SpelledPitch = {
+  step: string;
+  alter: number;
+  octave: number;
+};
+type SpellingContext = {
+  accidentalState: AccidentalState;
+  previousKey: number | null;
+  keyFifths: number;
+};
 
-const STEP_TABLE = ["C", "C", "D", "D", "E", "F", "F", "G", "G", "A", "A", "B"] as const;
-const ALTER_TABLE = [0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0] as const;
+const PITCH_CANDIDATES: ReadonlyArray<ReadonlyArray<{ step: string; alter: number }>> = [
+  [{ step: "C", alter: 0 }],
+  [{ step: "C", alter: 1 }, { step: "D", alter: -1 }],
+  [{ step: "D", alter: 0 }],
+  [{ step: "D", alter: 1 }, { step: "E", alter: -1 }],
+  [{ step: "E", alter: 0 }],
+  [{ step: "F", alter: 0 }],
+  [{ step: "F", alter: 1 }, { step: "G", alter: -1 }],
+  [{ step: "G", alter: 0 }],
+  [{ step: "G", alter: 1 }, { step: "A", alter: -1 }],
+  [{ step: "A", alter: 0 }],
+  [{ step: "A", alter: 1 }, { step: "B", alter: -1 }],
+  [{ step: "B", alter: 0 }],
+] as const;
+const STEPS_IN_SHARP_ORDER = ["F", "C", "G", "D", "A", "E", "B"] as const;
+const STEPS_IN_FLAT_ORDER = ["B", "E", "A", "D", "G", "C", "F"] as const;
 
 function escapeXml(value: string): string {
   return value
@@ -127,12 +151,13 @@ function decomposeDuration(duration: number, divisions: number): DurationSpec[] 
   return dfs(Math.max(0, Math.trunc(duration)), 0);
 }
 
-function toPitch(key: number): { step: string; alter: number; octave: number } {
+function toPitch(key: number): SpelledPitch {
   const normalized = ((Math.trunc(key) % 12) + 12) % 12;
   const octave = Math.floor(key / 12) - 1;
+  const selected = PITCH_CANDIDATES[normalized][0];
   return {
-    step: STEP_TABLE[normalized],
-    alter: ALTER_TABLE[normalized],
+    step: selected.step,
+    alter: selected.alter,
     octave,
   };
 }
@@ -148,17 +173,97 @@ function accidentalTextFromAlter(alter: number): string | null {
   return null;
 }
 
-function pitchStateKey(key: number): string {
-  const pitch = toPitch(key);
+function pitchStateKey(pitch: SpelledPitch): string {
   return `${pitch.step}:${pitch.octave}`;
 }
 
-function resolveAccidentalText(key: number, accidentalState: AccidentalState, suppress: boolean): string | null {
-  const pitch = toPitch(key);
-  const stateKey = pitchStateKey(key);
+function clampFifths(value: number): number {
+  return Math.max(-7, Math.min(7, Math.trunc(value)));
+}
+
+function defaultAlterFromFifths(step: string, fifths: number): number {
+  const f = clampFifths(fifths);
+  if (f > 0 && STEPS_IN_SHARP_ORDER.slice(0, f).includes(step as (typeof STEPS_IN_SHARP_ORDER)[number])) {
+    return 1;
+  }
+  if (f < 0 && STEPS_IN_FLAT_ORDER.slice(0, -f).includes(step as (typeof STEPS_IN_FLAT_ORDER)[number])) {
+    return -1;
+  }
+  return 0;
+}
+
+function getPreviousAlterForPitch(pitch: SpelledPitch, context: SpellingContext): number {
+  const stateKey = pitchStateKey(pitch);
+  const mapped = context.accidentalState.get(stateKey);
+  if (mapped != null) return mapped;
+  return defaultAlterFromFifths(pitch.step, context.keyFifths);
+}
+
+function estimateFifthsForTrack(track: Track): number {
+  if (track.notes.length === 0) return 0;
+  let bestFifths = 0;
+  let bestPenalty = Number.POSITIVE_INFINITY;
+  for (let fifths = -7; fifths <= 7; fifths += 1) {
+    let penalty = 0;
+    for (const note of track.notes) {
+      const pitch = toPitch(note.key);
+      const keyAlter = defaultAlterFromFifths(pitch.step, fifths);
+      penalty += Math.abs(pitch.alter - keyAlter);
+    }
+    if (penalty < bestPenalty) {
+      bestPenalty = penalty;
+      bestFifths = fifths;
+    }
+  }
+  return bestFifths;
+}
+
+function choosePitchSpelling(key: number, context: SpellingContext): SpelledPitch {
+  const normalized = ((Math.trunc(key) % 12) + 12) % 12;
+  const octave = Math.floor(key / 12) - 1;
+  const candidates = PITCH_CANDIDATES[normalized];
+  if (candidates.length === 1) {
+    return { step: candidates[0].step, alter: candidates[0].alter, octave };
+  }
+
+  const previousKey = context.previousKey;
+  const scored = candidates.map((candidate, index) => {
+    const pitch: SpelledPitch = { step: candidate.step, alter: candidate.alter, octave };
+    const prevAlter = getPreviousAlterForPitch(pitch, context);
+    const needsAccidental = prevAlter === candidate.alter ? 0 : 1;
+    const directionBias =
+      previousKey == null
+        ? 0
+        : key < previousKey
+          ? candidate.alter < 0
+            ? -0.25
+            : 0
+          : key > previousKey
+            ? candidate.alter > 0
+              ? -0.25
+              : 0
+            : 0;
+    return {
+      index,
+      candidate,
+      score: needsAccidental + directionBias,
+    };
+  });
+
+  scored.sort((a, b) => a.score - b.score || a.index - b.index);
+  const selected = scored[0].candidate;
+  return { step: selected.step, alter: selected.alter, octave };
+}
+
+function resolveAccidentalText(
+  pitch: SpelledPitch,
+  context: SpellingContext,
+  suppress: boolean,
+): string | null {
+  const stateKey = pitchStateKey(pitch);
   const currentAlter = Math.trunc(pitch.alter);
-  const prevAlter = accidentalState.get(stateKey) ?? 0;
-  accidentalState.set(stateKey, currentAlter);
+  const prevAlter = getPreviousAlterForPitch(pitch, context);
+  context.accidentalState.set(stateKey, currentAlter);
   if (suppress || currentAlter === prevAlter) return null;
   return accidentalTextFromAlter(currentAlter);
 }
@@ -256,12 +361,12 @@ function chooseClef(track: Track): Clef {
   return { sign: "G", line: 2 };
 }
 
-function renderAttributes(measure: Measure, divisions: number, clef: Clef): string {
+function renderAttributes(measure: Measure, divisions: number, clef: Clef, keyFifths: number): string {
   const ts = measure.timeSignature;
   return (
     `<attributes>` +
     `<divisions>${divisions}</divisions>` +
-    `<key><fifths>0</fifths></key>` +
+    `<key><fifths>${clampFifths(keyFifths)}</fifths></key>` +
     `<time><beats>${ts.numerator}</beats><beat-type>${ts.denominator}</beat-type></time>` +
     `<clef><sign>${clef.sign}</sign><line>${clef.line}</line></clef>` +
     `</attributes>`
@@ -307,7 +412,7 @@ function renderRest(duration: number, voice: number, divisions: number): string 
 }
 
 function renderSingleNote(
-  note: Note,
+  pitch: SpelledPitch,
   duration: number,
   voice: number,
   noteType: { type: string; dots: number } | null,
@@ -318,7 +423,6 @@ function renderSingleNote(
   accidentalText: string | null,
   options?: { chord?: boolean; lyric?: boolean },
 ): string {
-  const pitch = toPitch(note.key);
   const isChordTone = options?.chord === true;
 
   return (
@@ -343,7 +447,7 @@ function renderNoteSegment(
   endTick: number,
   divisions: number,
   voice: number,
-  accidentalState: AccidentalState,
+  spellingContext: SpellingContext,
   options?: { chord?: boolean; lyric?: boolean },
 ): string {
   const duration = Math.max(1, endTick - startTick);
@@ -353,12 +457,14 @@ function renderNoteSegment(
   const includeLyric = options?.lyric ?? true;
   const lyric = includeLyric && isFirstSegment ? escapeXml(normalizeText(note.lyric || "あ")) : "";
   const syllabic = isFirstSegment ? (extTieStart ? "begin" : "single") : "";
-  const accidentalText = resolveAccidentalText(note.key, accidentalState, extTieStop);
+  const pitch = choosePitchSpelling(note.key, spellingContext);
+  const accidentalText = resolveAccidentalText(pitch, spellingContext, extTieStop);
+  spellingContext.previousKey = note.key;
 
   // Keep chord tones as a single note at the same onset.
   if (options?.chord) {
     return renderSingleNote(
-      note,
+      pitch,
       duration,
       voice,
       noteTypeFromDuration(duration, divisions),
@@ -374,7 +480,7 @@ function renderNoteSegment(
   const specs = decomposeDuration(duration, divisions);
   if (!specs || specs.length <= 1) {
     return renderSingleNote(
-      note,
+      pitch,
       duration,
       voice,
       noteTypeFromDuration(duration, divisions),
@@ -396,7 +502,7 @@ function renderNoteSegment(
     const syllabicForPart = i === 0 ? syllabic : "";
     const accidentalForPart = i === 0 ? accidentalText : null;
     out += renderSingleNote(
-      note,
+      pitch,
       spec.duration,
       voice,
       { type: spec.type, dots: spec.dots },
@@ -478,8 +584,13 @@ function renderVoiceLane(
   measure: Measure,
   divisions: number,
   voiceNumber: number,
+  keyFifths: number,
 ): string {
-  const accidentalState: AccidentalState = new Map();
+  const spellingContext: SpellingContext = {
+    accidentalState: new Map(),
+    previousKey: null,
+    keyFifths,
+  };
   const measureStart = measure.startTick;
   const measureEnd = measure.startTick + measure.lengthTick;
   let cursor = measureStart;
@@ -490,7 +601,7 @@ function renderVoiceLane(
     }
     for (let i = 0; i < cluster.slices.length; i += 1) {
       const slice = cluster.slices[i];
-      out += renderNoteSegment(slice.note, slice.startTick, slice.endTick, divisions, voiceNumber, accidentalState, {
+      out += renderNoteSegment(slice.note, slice.startTick, slice.endTick, divisions, voiceNumber, spellingContext, {
         chord: i > 0,
         lyric: i === 0,
       });
@@ -511,12 +622,38 @@ function renderMeasureNotes(project: Project, trackNotes: Note[], measure: Measu
     return renderRest(measure.lengthTick, 1, divisions);
   }
   if (lanes.length === 1) {
-    return renderVoiceLane(lanes[0], measure, divisions, 1);
+    return renderVoiceLane(lanes[0], measure, divisions, 1, 0);
   }
 
   let out = "";
   for (let i = 0; i < lanes.length; i += 1) {
-    out += renderVoiceLane(lanes[i], measure, divisions, i + 1);
+    out += renderVoiceLane(lanes[i], measure, divisions, i + 1, 0);
+    if (i < lanes.length - 1) {
+      out += `<backup><duration>${measure.lengthTick}</duration></backup>`;
+    }
+  }
+  return out;
+}
+
+function renderMeasureNotesWithKey(
+  project: Project,
+  trackNotes: Note[],
+  measure: Measure,
+  keyFifths: number,
+): string {
+  const divisions = project.ppq > 0 ? project.ppq : 480;
+  const slices = sliceNotesForMeasure(trackNotes, measure);
+  const lanes = assignVoices(toClusters(slices));
+  if (lanes.length === 0) {
+    return renderRest(measure.lengthTick, 1, divisions);
+  }
+  if (lanes.length === 1) {
+    return renderVoiceLane(lanes[0], measure, divisions, 1, keyFifths);
+  }
+
+  let out = "";
+  for (let i = 0; i < lanes.length; i += 1) {
+    out += renderVoiceLane(lanes[i], measure, divisions, i + 1, keyFifths);
     if (i < lanes.length - 1) {
       out += `<backup><duration>${measure.lengthTick}</duration></backup>`;
     }
@@ -564,6 +701,7 @@ export function generateMusicXmlFromProject(project: Project): string {
       const partId = `P${index + 1}`;
       const partTempos = index === 0 ? tempos : [];
       const clef = chooseClef(track);
+      const keyFifths = estimateFifthsForTrack(track);
       const notes = [...track.notes].sort((a, b) => a.tickOn - b.tickOn || a.tickOff - b.tickOff);
       const measuresXml = measures
         .map((measure) => {
@@ -571,9 +709,9 @@ export function generateMusicXmlFromProject(project: Project): string {
           const needsAttributes = measure.index === 0 || hasTimeSigChange;
           return (
             `<measure number="${measureNumberBase + measure.index}">` +
-            `${needsAttributes ? renderAttributes(measure, ppq, clef) : ""}` +
+            `${needsAttributes ? renderAttributes(measure, ppq, clef, keyFifths) : ""}` +
             `${renderTempoDirections(measure, partTempos)}` +
-            `${renderMeasureNotes(project, notes, measure)}` +
+            `${renderMeasureNotesWithKey(project, notes, measure, keyFifths)}` +
             `</measure>`
           );
         })
