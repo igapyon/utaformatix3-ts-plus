@@ -1,0 +1,5 @@
+{
+  "id": "musicxml_direction_notations_01",
+  "features": ["notes", "tempo", "timesig", "direction", "notations", "voice", "staff", "tie"],
+  "knownLimitations": ["direction/notations/voice/staff are currently parsed as pass-through context and not mapped to Project fields"]
+}

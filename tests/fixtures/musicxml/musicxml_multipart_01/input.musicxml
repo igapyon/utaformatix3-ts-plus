@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="2.0">
+  <part-list>
+    <score-part id="P1"><part-name>Main</part-name></score-part>
+    <score-part id="P2"><part-name>Harmony</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>3</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <sound tempo="90"/>
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>480</duration>
+        <lyric><text>ま</text></lyric>
+      </note>
+    </measure>
+  </part>
+  <part id="P2">
+    <measure number="1">
+      <note>
+        <pitch><step>G</step><octave>4</octave></pitch>
+        <duration>960</duration>
+        <lyric><text>は</text></lyric>
+      </note>
+    </measure>
+  </part>
+</score-partwise>
