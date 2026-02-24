@@ -28,6 +28,12 @@ type Clef = {
   line: 2 | 4;
 };
 
+type DurationSpec = {
+  duration: number;
+  type: string;
+  dots: number;
+};
+
 const STEP_TABLE = ["C", "C", "D", "D", "E", "F", "F", "G", "G", "A", "A", "B"] as const;
 const ALTER_TABLE = [0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0] as const;
 
@@ -54,7 +60,7 @@ function normalizeText(value: string): string {
   return unwrapCdata(String(value ?? ""));
 }
 
-function noteTypeFromDuration(duration: number, divisions: number): { type: string; dots: number } | null {
+function buildDurationSpecs(divisions: number): DurationSpec[] {
   const candidates: Array<{ type: string; base: number }> = [
     { type: "whole", base: divisions * 4 },
     { type: "half", base: divisions * 2 },
@@ -63,21 +69,60 @@ function noteTypeFromDuration(duration: number, divisions: number): { type: stri
     { type: "16th", base: divisions / 4 },
     { type: "32nd", base: divisions / 8 },
     { type: "64th", base: divisions / 16 },
+    { type: "128th", base: divisions / 32 },
   ];
 
+  const specs: DurationSpec[] = [];
   for (const candidate of candidates) {
-    if (candidate.base <= 0) continue;
-    if (duration === candidate.base) {
-      return { type: candidate.type, dots: 0 };
+    if (!(candidate.base > 0) || !Number.isInteger(candidate.base)) continue;
+    specs.push({ duration: candidate.base, type: candidate.type, dots: 0 });
+    if (Number.isInteger((candidate.base * 3) / 2)) {
+      specs.push({ duration: (candidate.base * 3) / 2, type: candidate.type, dots: 1 });
     }
-    if (duration * 2 === candidate.base * 3) {
-      return { type: candidate.type, dots: 1 };
-    }
-    if (duration * 4 === candidate.base * 7) {
-      return { type: candidate.type, dots: 2 };
+    if (Number.isInteger((candidate.base * 7) / 4)) {
+      specs.push({ duration: (candidate.base * 7) / 4, type: candidate.type, dots: 2 });
     }
   }
+
+  const dedup = new Map<string, DurationSpec>();
+  for (const spec of specs) {
+    const key = `${spec.duration}:${spec.type}:${spec.dots}`;
+    if (!dedup.has(key)) dedup.set(key, spec);
+  }
+  return Array.from(dedup.values()).sort((a, b) => b.duration - a.duration);
+}
+
+function noteTypeFromDuration(duration: number, divisions: number): { type: string; dots: number } | null {
+  const spec = buildDurationSpecs(divisions).find((it) => it.duration === duration);
+  if (spec) return { type: spec.type, dots: spec.dots };
   return null;
+}
+
+function decomposeDuration(duration: number, divisions: number): DurationSpec[] | null {
+  const specs = buildDurationSpecs(divisions);
+  const memo = new Map<number, DurationSpec[] | null>();
+  const maxParts = 16;
+
+  const dfs = (remaining: number, depth: number): DurationSpec[] | null => {
+    if (remaining === 0) return [];
+    if (remaining < 0 || depth >= maxParts) return null;
+    const cached = memo.get(remaining);
+    if (cached !== undefined) return cached;
+
+    for (const spec of specs) {
+      if (spec.duration > remaining) continue;
+      const tail = dfs(remaining - spec.duration, depth + 1);
+      if (tail) {
+        const result = [spec, ...tail];
+        memo.set(remaining, result);
+        return result;
+      }
+    }
+    memo.set(remaining, null);
+    return null;
+  };
+
+  return dfs(Math.max(0, Math.trunc(duration)), 0);
 }
 
 function toPitch(key: number): { step: string; alter: number; octave: number } {
@@ -111,6 +156,15 @@ function getMeasureTimeSignature(index: number, list: TimeSignature[]): TimeSign
     else break;
   }
   return active;
+}
+
+function tickAtMeasurePosition(position: number, ppq: number, tsList: TimeSignature[]): number {
+  const safePosition = Math.max(0, Math.trunc(position));
+  let tick = 0;
+  for (let index = 0; index < safePosition; index += 1) {
+    tick += Math.max(1, ticksPerMeasure(ppq, getMeasureTimeSignature(index, tsList)));
+  }
+  return tick;
 }
 
 function normalizeTempos(projectTempos: Tempo[]): Tempo[] {
@@ -204,27 +258,38 @@ function renderTempoDirections(measure: Measure, tempos: Project["tempos"]): str
     .join("");
 }
 
-function renderRest(duration: number, voice: number): string {
-  return `<note><rest/><duration>${duration}</duration><voice>${voice}</voice></note>`;
+function renderRest(duration: number, voice: number, divisions: number): string {
+  const specs = decomposeDuration(duration, divisions);
+  if (!specs || specs.length === 0) {
+    return `<note><rest/><duration>${duration}</duration><voice>${voice}</voice></note>`;
+  }
+  return specs
+    .map((spec) => {
+      return (
+        `<note>` +
+        `<rest/>` +
+        `<duration>${spec.duration}</duration>` +
+        `<voice>${voice}</voice>` +
+        `<type>${spec.type}</type>` +
+        `${"<dot/>".repeat(spec.dots)}` +
+        `</note>`
+      );
+    })
+    .join("");
 }
 
-function renderNoteSegment(
+function renderSingleNote(
   note: Note,
-  startTick: number,
-  endTick: number,
-  divisions: number,
+  duration: number,
   voice: number,
+  noteType: { type: string; dots: number } | null,
+  tieStart: boolean,
+  tieStop: boolean,
+  lyric: string,
+  syllabic: string,
   options?: { chord?: boolean; lyric?: boolean },
 ): string {
-  const duration = Math.max(1, endTick - startTick);
   const pitch = toPitch(note.key);
-  const noteType = noteTypeFromDuration(duration, divisions);
-  const tieStart = endTick < note.tickOff;
-  const tieStop = startTick > note.tickOn;
-  const isFirstSegment = startTick === note.tickOn;
-  const includeLyric = options?.lyric ?? true;
-  const lyric = includeLyric && isFirstSegment ? escapeXml(normalizeText(note.lyric || "あ")) : "";
-  const syllabic = isFirstSegment ? (tieStart ? "begin" : "single") : "";
   const isChordTone = options?.chord === true;
 
   return (
@@ -240,6 +305,74 @@ function renderNoteSegment(
     `${lyric ? `<lyric>${syllabic ? `<syllabic>${syllabic}</syllabic>` : ""}<text>${lyric}</text></lyric>` : ""}` +
     `</note>`
   );
+}
+
+function renderNoteSegment(
+  note: Note,
+  startTick: number,
+  endTick: number,
+  divisions: number,
+  voice: number,
+  options?: { chord?: boolean; lyric?: boolean },
+): string {
+  const duration = Math.max(1, endTick - startTick);
+  const extTieStart = endTick < note.tickOff;
+  const extTieStop = startTick > note.tickOn;
+  const isFirstSegment = startTick === note.tickOn;
+  const includeLyric = options?.lyric ?? true;
+  const lyric = includeLyric && isFirstSegment ? escapeXml(normalizeText(note.lyric || "あ")) : "";
+  const syllabic = isFirstSegment ? (extTieStart ? "begin" : "single") : "";
+
+  // Keep chord tones as a single note at the same onset.
+  if (options?.chord) {
+    return renderSingleNote(
+      note,
+      duration,
+      voice,
+      noteTypeFromDuration(duration, divisions),
+      extTieStart,
+      extTieStop,
+      lyric,
+      syllabic,
+      options,
+    );
+  }
+
+  const specs = decomposeDuration(duration, divisions);
+  if (!specs || specs.length <= 1) {
+    return renderSingleNote(
+      note,
+      duration,
+      voice,
+      noteTypeFromDuration(duration, divisions),
+      extTieStart,
+      extTieStop,
+      lyric,
+      syllabic,
+      options,
+    );
+  }
+
+  let out = "";
+  for (let i = 0; i < specs.length; i += 1) {
+    const spec = specs[i];
+    const tieStop = extTieStop || i > 0;
+    const tieStart = extTieStart || i < specs.length - 1;
+    const lyricForPart = i === 0 ? lyric : "";
+    const syllabicForPart = i === 0 ? syllabic : "";
+    out += renderSingleNote(
+      note,
+      spec.duration,
+      voice,
+      { type: spec.type, dots: spec.dots },
+      tieStart,
+      tieStop,
+      lyricForPart,
+      syllabicForPart,
+      options,
+    );
+  }
+  return out;
 }
 
 function sliceNotesForMeasure(trackNotes: Note[], measure: Measure): NoteSlice[] {
@@ -316,7 +449,7 @@ function renderVoiceLane(
   let out = "";
   for (const cluster of clusters) {
     if (cluster.startTick > cursor) {
-      out += renderRest(cluster.startTick - cursor, voiceNumber);
+      out += renderRest(cluster.startTick - cursor, voiceNumber, divisions);
     }
     for (let i = 0; i < cluster.slices.length; i += 1) {
       const slice = cluster.slices[i];
@@ -328,7 +461,7 @@ function renderVoiceLane(
     cursor = Math.max(cursor, cluster.endTick);
   }
   if (cursor < measureEnd) {
-    out += renderRest(measureEnd - cursor, voiceNumber);
+    out += renderRest(measureEnd - cursor, voiceNumber, divisions);
   }
   return out;
 }
@@ -338,7 +471,7 @@ function renderMeasureNotes(project: Project, trackNotes: Note[], measure: Measu
   const slices = sliceNotesForMeasure(trackNotes, measure);
   const lanes = assignVoices(toClusters(slices));
   if (lanes.length === 0) {
-    return renderRest(measure.lengthTick, 1);
+    return renderRest(measure.lengthTick, 1, divisions);
   }
   if (lanes.length === 1) {
     return renderVoiceLane(lanes[0], measure, divisions, 1);
@@ -358,6 +491,7 @@ export function generateMusicXmlFromProject(project: Project): string {
   const ppq = project.ppq > 0 ? project.ppq : 480;
   const measureNumberBase = Math.max(0, Math.trunc(project.measurePrefix || 0)) + 1;
   const tempos = normalizeTempos(project.tempos);
+  const tsList = sortTimeSignatures(project);
   const tracks: Track[] =
     project.tracks.length > 0
       ? project.tracks
@@ -373,9 +507,12 @@ export function generateMusicXmlFromProject(project: Project): string {
     ...tracks.flatMap((track) => track.notes.map((note) => note.tickOff)),
   );
   const maxTempoTick = Math.max(0, ...tempos.map((tempo) => tempo.tickPosition));
-  const maxTick = Math.max(maxNoteTick, maxTempoTick);
+  const maxTimeSigTick = Math.max(
+    0,
+    ...tsList.map((ts) => tickAtMeasurePosition(ts.measurePosition, ppq, tsList)),
+  );
+  const maxTick = Math.max(maxNoteTick, maxTempoTick, maxTimeSigTick);
   const measures = buildMeasures(project, maxTick);
-  const tsList = sortTimeSignatures(project);
 
   const partList = tracks
     .map((track, index) => {

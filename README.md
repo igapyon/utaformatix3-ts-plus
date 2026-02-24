@@ -80,6 +80,12 @@ VSQX から MusicXML を試験変換するスクリプト:
 node scripts/quick-convert-vsqx-to-musicxml.mjs <input.vsqx> <output.musicxml> [defaultLyric]
 ```
 
+VSQX から MusicXML 生成後に、MusicXML パースまで通して簡易検証するスクリプト:
+
+```bash
+node scripts/validate-vsqx-to-musicxml.mjs <input.vsqx> [defaultLyric]
+```
+
 ## ライセンス
 
 [LICENSE](./LICENSE) を参照してください。
