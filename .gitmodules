@@ -1,0 +1,6 @@
+[submodule "upstream/utaformatix3-ts"]
+	path = upstream/utaformatix3-ts
+	url = https://github.com/igapyon/utaformatix3-ts.git
+[submodule "upstream/mikuscore"]
+	path = upstream/mikuscore
+	url = https://github.com/igapyon/mikuscore.git
