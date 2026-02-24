@@ -8,6 +8,7 @@ import type { MusicXmlParseOptions } from "../musicxml/index.ts";
 
 export type MusicXmlToVsqxOptions = {
   musicXml?: MusicXmlParseOptions;
+  splitPartStaves?: boolean;
 };
 
 export type MusicXmlToVsqxIssueLevel = "warning" | "error";
@@ -158,6 +159,206 @@ function splitTracksByPartAndStaff(project: Project, musicXmlText: string): Proj
     };
   }
 
+  return {
+    ...project,
+    tracks: nextTracks,
+  };
+}
+
+type RawPitchedEvent = {
+  key: number;
+  tickOn: number;
+  tickOff: number;
+};
+
+function stepToSemitone(step: string): number {
+  switch (step) {
+    case "C":
+      return 0;
+    case "D":
+      return 2;
+    case "E":
+      return 4;
+    case "F":
+      return 5;
+    case "G":
+      return 7;
+    case "A":
+      return 9;
+    case "B":
+      return 11;
+    default:
+      return 0;
+  }
+}
+
+function extractPartPitchedEvents(partBlock: string, ppq: number): RawPitchedEvent[] {
+  const tokenRegex =
+    /<attributes(?:\s[^>]*)?>[\s\S]*?<\/attributes>|<backup(?:\s[^>]*)?>[\s\S]*?<\/backup>|<forward(?:\s[^>]*)?>[\s\S]*?<\/forward>|<note>[\s\S]*?<\/note>/g;
+  const tokens = Array.from(partBlock.matchAll(tokenRegex)).map((m) => m[0]);
+  const events: RawPitchedEvent[] = [];
+  let divisions = 1;
+  let cursorDiv = 0;
+  let previousOnsetDiv = 0;
+
+  for (const token of tokens) {
+    if (token.startsWith("<attributes")) {
+      const divRaw = Number(token.match(/<divisions>(\d+)<\/divisions>/)?.[1] ?? "");
+      if (Number.isFinite(divRaw) && divRaw > 0) {
+        divisions = divRaw;
+      }
+      continue;
+    }
+    if (token.startsWith("<backup")) {
+      const durationRaw = Number(token.match(/<duration>(-?\d+)<\/duration>/)?.[1] ?? "");
+      if (Number.isFinite(durationRaw)) {
+        cursorDiv = Math.max(0, cursorDiv - durationRaw);
+      }
+      continue;
+    }
+    if (token.startsWith("<forward")) {
+      const durationRaw = Number(token.match(/<duration>(-?\d+)<\/duration>/)?.[1] ?? "");
+      if (Number.isFinite(durationRaw)) {
+        cursorDiv += Math.max(0, durationRaw);
+      }
+      continue;
+    }
+
+    const noteBlock = token;
+    if (/<grace(\s|\/|>)/.test(noteBlock)) continue;
+    const durationRaw = Number(noteBlock.match(/<duration>(-?\d+)<\/duration>/)?.[1] ?? "");
+    const durationDiv = Number.isFinite(durationRaw) ? Math.max(0, durationRaw) : 0;
+    const isChord = /<chord(\s|\/|>)/.test(noteBlock);
+    const isRest = /<rest(\s|\/|>)/.test(noteBlock);
+    const onsetDiv = isChord ? previousOnsetDiv : cursorDiv;
+
+    if (!isRest) {
+    const step = (noteBlock.match(/<step>([A-G])<\/step>/)?.[1] ?? "").trim();
+      if (step) {
+        const octaveRaw = Number(noteBlock.match(/<octave>(-?\d+)<\/octave>/)?.[1] ?? "");
+        if (Number.isFinite(octaveRaw)) {
+          const alterRaw = Number(noteBlock.match(/<alter>(-?\d+)<\/alter>/)?.[1] ?? "0");
+          const alter = Number.isFinite(alterRaw) ? alterRaw : 0;
+          const key = (octaveRaw + 1) * 12 + stepToSemitone(step) + alter;
+          const tickOn = Math.round((onsetDiv * ppq) / divisions);
+          const tickOff = Math.round(((onsetDiv + durationDiv) * ppq) / divisions);
+          events.push({ key, tickOn, tickOff });
+        }
+      }
+    }
+
+    previousOnsetDiv = onsetDiv;
+    if (!isChord) {
+      cursorDiv += durationDiv;
+    }
+  }
+  return events;
+}
+
+function normalizeChordOnsetsFromSource(project: Project, musicXmlText: string): Project {
+  const partBlocks = extractTagBlocks(musicXmlText, "part");
+  if (partBlocks.length === 0 || partBlocks.length !== project.tracks.length) {
+    return project;
+  }
+
+  const tracks = project.tracks.map((track, trackIndex) => {
+    const ppq = Number.isFinite(project.ppq) && project.ppq > 0 ? Math.trunc(project.ppq) : 480;
+    const events = extractPartPitchedEvents(partBlocks[trackIndex] ?? "", ppq);
+    if (events.length === 0 || track.notes.length === 0) {
+      return track;
+    }
+
+    const normalized = track.notes.map((note) => ({ ...note }));
+    let eventIndex = 0;
+    for (let noteIndex = 0; noteIndex < normalized.length; noteIndex += 1) {
+      const note = normalized[noteIndex];
+      let matched = -1;
+      for (let i = eventIndex; i < events.length; i += 1) {
+        if (events[i].key === note.key) {
+          matched = i;
+          break;
+        }
+      }
+      if (matched < 0) continue;
+      const event = events[matched];
+      note.tickOn = event.tickOn;
+      note.tickOff = Math.max(event.tickOn + 1, event.tickOff);
+      eventIndex = matched + 1;
+    }
+
+    return {
+      ...track,
+      notes: normalized
+        .sort((a, b) => a.tickOn - b.tickOn || a.tickOff - b.tickOff || a.key - b.key)
+        .map((note, noteId) => ({ ...note, id: noteId })),
+    };
+  });
+
+  return {
+    ...project,
+    tracks,
+  };
+}
+
+function splitTrackIntoMonophonicLanes(track: Track): Track[] {
+  const sortedNotes = [...track.notes].sort((a, b) => a.tickOn - b.tickOn || a.tickOff - b.tickOff || a.key - b.key);
+  if (sortedNotes.length <= 1) {
+    return [
+      {
+        ...track,
+        notes: sortedNotes.map((note, noteIndex) => ({ ...note, id: noteIndex })),
+      },
+    ];
+  }
+
+  const laneEndTicks: number[] = [];
+  const laneNotes: typeof sortedNotes[] = [];
+
+  for (const note of sortedNotes) {
+    let laneIndex = -1;
+    for (let i = 0; i < laneEndTicks.length; i += 1) {
+      if (laneEndTicks[i] <= note.tickOn) {
+        laneIndex = i;
+        break;
+      }
+    }
+    if (laneIndex < 0) {
+      laneIndex = laneEndTicks.length;
+      laneEndTicks.push(note.tickOff);
+      laneNotes.push([]);
+    } else {
+      laneEndTicks[laneIndex] = note.tickOff;
+    }
+    laneNotes[laneIndex].push(note);
+  }
+
+  if (laneNotes.length <= 1) {
+    return [
+      {
+        ...track,
+        notes: sortedNotes.map((note, noteIndex) => ({ ...note, id: noteIndex })),
+      },
+    ];
+  }
+
+  return laneNotes.map((notes, laneIndex) => ({
+    ...track,
+    name: `${track.name} [Lane ${laneIndex + 1}]`,
+    notes: notes.map((note, noteIndex) => ({ ...note, id: noteIndex })),
+  }));
+}
+
+function splitTracksIntoMonophonicLanes(project: Project): Project {
+  const nextTracks: Track[] = [];
+  for (const track of project.tracks) {
+    const lanes = splitTrackIntoMonophonicLanes(track);
+    for (const lane of lanes) {
+      nextTracks.push({
+        ...lane,
+        id: nextTracks.length,
+      });
+    }
+  }
   return {
     ...project,
     tracks: nextTracks,
@@ -334,7 +535,11 @@ export function convertMusicXmlToVsqxWithReport(
     return { vsqx: null, issues, retainedExtras: undefined };
   }
 
-  project = splitTracksByPartAndStaff(project, musicXmlText);
+  project = normalizeChordOnsetsFromSource(project, musicXmlText);
+  if (options?.splitPartStaves === true) {
+    project = splitTracksByPartAndStaff(project, musicXmlText);
+  }
+  project = splitTracksIntoMonophonicLanes(project);
   issues.push(...collectProjectWarnings(project));
   const enriched = enrichProjectExtrasWithUnsupportedNotation(project, unsupportedNotationSummary);
   const normalized = normalizeProjectForVsqxExport(enriched);

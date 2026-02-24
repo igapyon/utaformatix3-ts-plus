@@ -13,6 +13,8 @@
   - ローカル検証用fixture
 - `tests/golden/`
   - ゴールデンデータ
+- `tests/artifacts/manual-convert/`
+  - 手動変換の出力先（確認用）
 - `upstream/utaformatix3-ts/`
   - 参照実装（read-only運用）
 - `upstream/mikuscore/`
@@ -48,4 +50,3 @@
 - GitHub Actions の追加/更新
 - GitHubへのpushやPR操作
 - リモート環境依存の検証フロー
-
