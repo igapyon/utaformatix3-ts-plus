@@ -1,23 +1,69 @@
 import { parseMusicXml as parseLegacyMusicXml, writeMusicXml as writeLegacyMusicXml } from "../../upstream/utaformatix3-ts/dist-lib/utaformatix3-ts.esm.js";
 import type { Project } from "../../upstream/utaformatix3-ts/src/core/model/Project";
-import {
-  normalizeImportedMusicXmlText,
-  parseMusicXmlDocument,
-  prettyPrintMusicXmlText,
-  serializeMusicXmlDocument,
-} from "../../upstream/mikuscore/src/ts/musicxml-io.ts";
 import type { MusicXmlAdapter, MusicXmlParseOptions, MusicXmlWriteOptions } from "./MusicXmlAdapter.ts";
 import { generateMusicXmlFromProject } from "./ProjectToMusicXml.ts";
+
+type MikuscoreMusicXmlHooks = {
+  normalizeImportedMusicXmlText?: (xml: string) => string;
+};
+
+function getGlobalHooks(): MikuscoreMusicXmlHooks {
+  const g = globalThis as unknown as Record<string, unknown>;
+  const fromDirect = g.__utaformatix3TsPlusMikuscoreHooks;
+  if (fromDirect && typeof fromDirect === "object") {
+    return fromDirect as MikuscoreMusicXmlHooks;
+  }
+  const mks = g.mikuscore;
+  if (mks && typeof mks === "object") {
+    return mks as MikuscoreMusicXmlHooks;
+  }
+  return {};
+}
 
 function hasXmlDomRuntime(): boolean {
   return typeof DOMParser !== "undefined" && typeof XMLSerializer !== "undefined";
 }
 
+function parseMusicXmlDocument(xml: string): Document | null {
+  if (!hasXmlDomRuntime()) return null;
+  const doc = new DOMParser().parseFromString(xml, "application/xml");
+  return doc.querySelector("parsererror") ? null : doc;
+}
+
+function serializeMusicXmlDocument(doc: Document): string {
+  return new XMLSerializer().serializeToString(doc);
+}
+
+function prettyPrintMusicXmlText(xml: string): string {
+  const compact = String(xml || "").replace(/>\s+</g, "><").trim();
+  const split = compact.replace(/(>)(<)(\/*)/g, "$1\n$2$3").split("\n");
+  let indent = 0;
+  const lines: string[] = [];
+  for (const rawToken of split) {
+    const token = rawToken.trim();
+    if (!token) continue;
+    if (/^<\//.test(token)) indent = Math.max(0, indent - 1);
+    lines.push(`${" ".repeat(indent)}${token}`);
+    const isOpening = /^<[^!?/][^>]*>$/.test(token);
+    const isSelfClosing = /\/>$/.test(token);
+    if (isOpening && !isSelfClosing) indent += 1;
+  }
+  return lines.join("\n");
+}
+
 function normalizeForOutput(xml: string): string {
+  const hooks = getGlobalHooks();
+  if (typeof hooks.normalizeImportedMusicXmlText === "function") {
+    try {
+      return hooks.normalizeImportedMusicXmlText(xml);
+    } catch {
+      return String(xml ?? "");
+    }
+  }
   if (!hasXmlDomRuntime()) {
     return String(xml ?? "");
   }
-  const normalized = normalizeImportedMusicXmlText(xml);
+  const normalized = String(xml ?? "");
   const doc = parseMusicXmlDocument(normalized);
   if (!doc) {
     return normalized;
