@@ -39,7 +39,7 @@ const project = {
 };
 
 try {
-  const neutralXml = generateMusicXmlFromProject(project);
+  const neutralXml = generateMusicXmlFromProject(project, { keyFifths: 0 });
   const flatXml = generateMusicXmlFromProject(project, { keyFifths: -5 });
 
   const sharpCount = (neutralXml.match(/<accidental>sharp<\/accidental>/g) ?? []).length;
