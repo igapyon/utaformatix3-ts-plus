@@ -9,6 +9,7 @@
 - [ ] ビルド・テスト実行基盤（TypeScript + test runner）を初期化する
 - [ ] CI の最小パイプライン（lint/typecheck/test）を構築する
 - [ ] `mikuscore` 参照ポイント（MusicXML入出力の対象ファイル/関数）を一覧化する
+- [ ] `MusicXmlAdapter` 境界インターフェース（`Project/UFData <-> MusicXML DOM`）を定義する
 
 ## 1. Phase 1: VSQX Import -> MusicXML 4.0 Export（最優先）
 
@@ -20,9 +21,10 @@
 
 ### 1-2. MusicXML 4.0 output 強化
 
-- [ ] MusicXML 4.0 出力の最小スキーマ方針を定義する
+- [ ] MusicXML 4.0 出力の最小スキーマ方針を定義する（`mikuscore` 活用前提）
 - [ ] 音価・タイ・休符・テンポ指示・拍子の出力規則を確定する
 - [ ] 歌詞・音節（syllabic）出力方針を確定する
+- [ ] `mikuscore` の MusicXML I/O 呼び出しアダプタを試作する
 
 ### 1-3. テスト
 
@@ -69,4 +71,4 @@
 
 ## 進行中（1つだけ）
 
-- [ ] Phase 1 の対象仕様（VSQX input / MusicXML 4.0 output）を確定する
+- [ ] Phase 1 の対象仕様（VSQX input / `mikuscore` 活用 MusicXML 4.0 output）を確定する
