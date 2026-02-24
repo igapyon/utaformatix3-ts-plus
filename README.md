@@ -93,6 +93,8 @@
 npm run check:all
 ```
 
+ローカル開発運用（ディレクトリ構成 / 日常フロー）は `DEVELOPMENT_WORKFLOW.md` を参照。
+
 VSQX から MusicXML を試験変換するスクリプト:
 
 ```bash
@@ -226,6 +228,7 @@ node scripts/validate-musicxml-keyfifths.mjs
 - `MUSICXML_OUTPUT_RULES.md`
 - `VSQX_INPUT_SPEC.md`
 - `PHASE1_SCOPE_SPEC.md`
+- `DEVELOPMENT_WORKFLOW.md`
 - `MUSICXML_4_0_COVERAGE.md`
 - `ROUNDTRIP_DIFF_CLASSIFICATION.md`
 - `QUALITY_METRICS.md`
@@ -266,6 +269,10 @@ node scripts/validate-musicxml-keyfifths.mjs
   - `issues` に warning / error を蓄積して返す（非throwで扱いたい用途向け）
   - MusicXML parse 時の `importWarnings` を `MUSICXML_IMPORT_WARNING` として取り込む
   - 未対応記譜がある場合は `retainedExtras.musicxml.unsupportedNotations` に集約する
+- mikuscore 連携用フックAPI:
+  - `installMikuscoreHooks(hooks)` で normalize/parse/write フックを登録
+  - `getMikuscoreHooks()` で現在有効なフックを参照
+  - `clearMikuscoreHooks()` で登録済みフックを解除
 
 ## ライセンス
 

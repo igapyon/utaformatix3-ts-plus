@@ -5,9 +5,9 @@
 ## 0. 基盤整備
 
 - [x] `README.md` / `ROADMAP.md` / `TODO.md` の相互整合を維持する（2026-02-25 時点の仕様反映）
-- [x] 開発用ディレクトリ構成（`src/`, `tests/`, `scripts/`）を確定する
+- [x] 開発用ディレクトリ構成（`src/`, `tests/`, `scripts/`）を確定する（`DEVELOPMENT_WORKFLOW.md`）
 - [x] ビルド・テスト実行基盤（TypeScript + test runner）を初期化する（`package.json`, `scripts/check-all.mjs`）
-- [ ] CI の最小パイプライン（lint/typecheck/test）を構築する
+- [x] CI の最小パイプライン（lint/typecheck/test）を構築する（GitHub非使用方針のためローカル品質ゲート `npm run check:all` として運用）
 - [x] `mikuscore` 参照ポイント（MusicXML入出力の対象ファイル/関数）を一覧化する（`MIKUSCORE_REFERENCE_POINTS.md`）
 - [x] `MusicXmlAdapter` 境界インターフェース（`Project/UFData <-> MusicXML DOM`）を定義する（`MUSICXML_ADAPTER_BOUNDARY.md`）
 

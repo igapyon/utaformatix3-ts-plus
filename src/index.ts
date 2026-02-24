@@ -2,11 +2,15 @@ export { convertVsqxToMusicXml, convertMusicXmlToVsqx } from "./converters/index
 export { convertVsqxToMusicXmlWithReport } from "./converters/index.ts";
 export { convertMusicXmlToVsqxWithReport } from "./converters/index.ts";
 export {
+  clearMikuscoreHooks,
   getMusicXmlAdapter,
+  getMikuscoreHooks,
+  installMikuscoreHooks,
   setMusicXmlAdapter,
   MikuscoreMusicXmlAdapter,
 } from "./musicxml/index.ts";
 export type {
+  MikuscoreMusicXmlHooks,
   MusicXmlAdapter,
   MusicXmlParseOptions,
   MusicXmlWriteMode,
