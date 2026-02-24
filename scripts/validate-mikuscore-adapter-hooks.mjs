@@ -2,7 +2,13 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { parseMusicXml, writeMusicXml } from "../upstream/utaformatix3-ts/dist-lib/utaformatix3-ts.esm.js";
-import { convertMusicXmlToVsqx, convertVsqxToMusicXml } from "../src/index.ts";
+import {
+  clearMikuscoreHooks,
+  convertMusicXmlToVsqx,
+  convertVsqxToMusicXml,
+  getMikuscoreHooks,
+  installMikuscoreHooks,
+} from "../src/index.ts";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -19,7 +25,7 @@ try {
   let parseCallCount = 0;
   let writeCallCount = 0;
 
-  globalThis.__utaformatix3TsPlusMikuscoreHooks = {
+  installMikuscoreHooks({
     normalizeImportedMusicXmlText: (xml) => {
       normalizeCallCount += 1;
       return String(xml ?? "");
@@ -35,7 +41,13 @@ try {
       }
       return writeMusicXml(project, { mode: "generate" });
     },
-  };
+  });
+
+  const hooks = getMikuscoreHooks();
+  assert(
+    typeof hooks.normalizeImportedMusicXmlText === "function",
+    "Expected installed normalizeImportedMusicXmlText hook",
+  );
 
   const vsqx = convertMusicXmlToVsqx(musicXmlInput, {
     musicXml: { defaultLyric: "あ" },
@@ -58,5 +70,5 @@ try {
   console.error(`Mikuscore adapter hooks validation failed: ${message}`);
   process.exit(2);
 } finally {
-  delete globalThis.__utaformatix3TsPlusMikuscoreHooks;
+  clearMikuscoreHooks();
 }

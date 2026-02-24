@@ -89,6 +89,7 @@
 
 - 仕様変更時は `README.md` / `ROADMAP.md` / `TODO.md` を同時更新
 - ローカル検証は `npm run check:all` を基準コマンドとして運用する
+- GitHub連携は運用対象外とし、品質ゲートはローカル実行に限定する
 - upstream 取り込みは submodule (`upstream/utaformatix3-ts`) を基点に判断
 - `mikuscore` 側の利用要件（API 形状、配布形態、依存条件）との整合は Phase 3 以降で確認する
 - `mikuscore` 側に不足や改善余地を見つけたら、改善要望として論点を整理して提出する

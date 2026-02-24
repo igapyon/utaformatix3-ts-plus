@@ -1,26 +1,8 @@
 import { parseMusicXml as parseLegacyMusicXml, writeMusicXml as writeLegacyMusicXml } from "../../upstream/utaformatix3-ts/dist-lib/utaformatix3-ts.esm.js";
 import type { Project } from "../../upstream/utaformatix3-ts/src/core/model/Project";
 import type { MusicXmlAdapter, MusicXmlParseOptions, MusicXmlWriteOptions } from "./MusicXmlAdapter.ts";
+import { getMikuscoreHooks } from "./MikuscoreHooks.ts";
 import { generateMusicXmlFromProject } from "./ProjectToMusicXml.ts";
-
-type MikuscoreMusicXmlHooks = {
-  normalizeImportedMusicXmlText?: (xml: string) => string;
-  parseMusicXmlToProject?: (xml: string, options?: MusicXmlParseOptions) => Project;
-  writeProjectToMusicXml?: (project: Project, options?: MusicXmlWriteOptions) => string;
-};
-
-function getGlobalHooks(): MikuscoreMusicXmlHooks {
-  const g = globalThis as unknown as Record<string, unknown>;
-  const fromDirect = g.__utaformatix3TsPlusMikuscoreHooks;
-  if (fromDirect && typeof fromDirect === "object") {
-    return fromDirect as MikuscoreMusicXmlHooks;
-  }
-  const mks = g.mikuscore;
-  if (mks && typeof mks === "object") {
-    return mks as MikuscoreMusicXmlHooks;
-  }
-  return {};
-}
 
 function hasXmlDomRuntime(): boolean {
   return typeof DOMParser !== "undefined" && typeof XMLSerializer !== "undefined";
@@ -54,7 +36,7 @@ function prettyPrintMusicXmlText(xml: string): string {
 }
 
 function normalizeForOutput(xml: string): string {
-  const hooks = getGlobalHooks();
+  const hooks = getMikuscoreHooks();
   if (typeof hooks.normalizeImportedMusicXmlText === "function") {
     try {
       return hooks.normalizeImportedMusicXmlText(xml);
@@ -75,7 +57,7 @@ function normalizeForOutput(xml: string): string {
 
 export class MikuscoreMusicXmlAdapter implements MusicXmlAdapter {
   public write(project: Project, options?: MusicXmlWriteOptions): string {
-    const hooks = getGlobalHooks();
+    const hooks = getMikuscoreHooks();
     if (typeof hooks.writeProjectToMusicXml === "function") {
       try {
         return this.normalize(hooks.writeProjectToMusicXml(project, options));
@@ -93,7 +75,7 @@ export class MikuscoreMusicXmlAdapter implements MusicXmlAdapter {
 
   public parse(xml: string, options?: MusicXmlParseOptions): Project {
     const normalized = this.normalize(xml);
-    const hooks = getGlobalHooks();
+    const hooks = getMikuscoreHooks();
     if (typeof hooks.parseMusicXmlToProject === "function") {
       try {
         return hooks.parseMusicXmlToProject(normalized, options);
