@@ -12,6 +12,7 @@ const commands = [
   ["node", ["scripts/validate-mikuscore-adapter-hooks.mjs"]],
   ["node", ["scripts/validate-musicxml-golden.mjs", "check"]],
   ["node", ["scripts/validate-musicxml-semantics.mjs"]],
+  ["node", ["scripts/validate-musicxml-staff-split.mjs"]],
   ["node", ["scripts/validate-vsqx-roundtrip-diff.mjs", "upstream/utaformatix3-ts/tests/fixtures/vsqx", "あ", "check"]],
   ["node", ["scripts/validate-musicxml-roundtrip-diff.mjs", "tests/fixtures/musicxml", "あ", "check"]],
 ];

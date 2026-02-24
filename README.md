@@ -24,6 +24,12 @@
 5. `utaformatix3-ts` 由来の MusicXML 入出力（2.0想定）は大規模拡張しない
 6. MusicXML 入出力は `mikuscore` 実装を優先活用し、`plus` 側はアダプタ層で接続する
 
+## upstream 運用ルール
+
+- `upstream/` 配下は **直接の追加・変更・削除を行わない**。
+- `upstream` の更新は、Git による受信（`fetch` / `pull` / `submodule` の参照更新 / tag checkout）でのみ行う。
+- 必要な修正は `plus` 側で吸収するか、別途 upstream へ提案する。
+
 ## 開発フェーズ
 
 ### Phase 1 (最優先)
@@ -135,6 +141,12 @@ MusicXML 未対応記譜の `retainedExtras` 退避検証:
 
 ```bash
 node scripts/validate-musicxml-unsupported-notation-extras.mjs
+```
+
+MusicXML の `part+staff` 分割（multi-staff -> multi-track）検証:
+
+```bash
+node scripts/validate-musicxml-staff-split.mjs
 ```
 
 `MikuscoreMusicXmlAdapter` のグローバルフック（normalize/parse/write）検証:
