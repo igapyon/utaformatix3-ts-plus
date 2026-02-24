@@ -108,6 +108,12 @@ VSQX→MusicXML→再読込で主要情報（音高・長さ・歌詞・テン�
 node scripts/validate-vsqx-semantics.mjs [fixturesRoot] [defaultLyric]
 ```
 
+MusicXML 出力の臨時記号ロジック（sharp/natural/小節リセット）を検証するスモークスクリプト:
+
+```bash
+node scripts/validate-musicxml-accidentals.mjs
+```
+
 ## ライセンス
 
 [LICENSE](./LICENSE) を参照してください。
