@@ -34,6 +34,8 @@ type DurationSpec = {
   dots: number;
 };
 
+type AccidentalState = Map<string, number>;
+
 const STEP_TABLE = ["C", "C", "D", "D", "E", "F", "F", "G", "G", "A", "A", "B"] as const;
 const ALTER_TABLE = [0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0] as const;
 
@@ -133,6 +135,32 @@ function toPitch(key: number): { step: string; alter: number; octave: number } {
     alter: ALTER_TABLE[normalized],
     octave,
   };
+}
+
+function accidentalTextFromAlter(alter: number): string | null {
+  if (!Number.isFinite(alter)) return null;
+  const normalized = Math.trunc(alter);
+  if (normalized === 2) return "double-sharp";
+  if (normalized === 1) return "sharp";
+  if (normalized === 0) return "natural";
+  if (normalized === -1) return "flat";
+  if (normalized === -2) return "double-flat";
+  return null;
+}
+
+function pitchStateKey(key: number): string {
+  const pitch = toPitch(key);
+  return `${pitch.step}:${pitch.octave}`;
+}
+
+function resolveAccidentalText(key: number, accidentalState: AccidentalState, suppress: boolean): string | null {
+  const pitch = toPitch(key);
+  const stateKey = pitchStateKey(key);
+  const currentAlter = Math.trunc(pitch.alter);
+  const prevAlter = accidentalState.get(stateKey) ?? 0;
+  accidentalState.set(stateKey, currentAlter);
+  if (suppress || currentAlter === prevAlter) return null;
+  return accidentalTextFromAlter(currentAlter);
 }
 
 function sortTimeSignatures(project: Project): TimeSignature[] {
@@ -287,6 +315,7 @@ function renderSingleNote(
   tieStop: boolean,
   lyric: string,
   syllabic: string,
+  accidentalText: string | null,
   options?: { chord?: boolean; lyric?: boolean },
 ): string {
   const pitch = toPitch(note.key);
@@ -296,6 +325,7 @@ function renderSingleNote(
     `<note>` +
     `${isChordTone ? `<chord/>` : ""}` +
     `<pitch><step>${pitch.step}</step>${pitch.alter !== 0 ? `<alter>${pitch.alter}</alter>` : ""}<octave>${pitch.octave}</octave></pitch>` +
+    `${accidentalText ? `<accidental>${accidentalText}</accidental>` : ""}` +
     `<duration>${duration}</duration>` +
     `<voice>${voice}</voice>` +
     `${noteType ? `<type>${noteType.type}</type>${"<dot/>".repeat(noteType.dots)}` : ""}` +
@@ -313,6 +343,7 @@ function renderNoteSegment(
   endTick: number,
   divisions: number,
   voice: number,
+  accidentalState: AccidentalState,
   options?: { chord?: boolean; lyric?: boolean },
 ): string {
   const duration = Math.max(1, endTick - startTick);
@@ -322,6 +353,7 @@ function renderNoteSegment(
   const includeLyric = options?.lyric ?? true;
   const lyric = includeLyric && isFirstSegment ? escapeXml(normalizeText(note.lyric || "あ")) : "";
   const syllabic = isFirstSegment ? (extTieStart ? "begin" : "single") : "";
+  const accidentalText = resolveAccidentalText(note.key, accidentalState, extTieStop);
 
   // Keep chord tones as a single note at the same onset.
   if (options?.chord) {
@@ -334,6 +366,7 @@ function renderNoteSegment(
       extTieStop,
       lyric,
       syllabic,
+      accidentalText,
       options,
     );
   }
@@ -349,6 +382,7 @@ function renderNoteSegment(
       extTieStop,
       lyric,
       syllabic,
+      accidentalText,
       options,
     );
   }
@@ -360,6 +394,7 @@ function renderNoteSegment(
     const tieStart = extTieStart || i < specs.length - 1;
     const lyricForPart = i === 0 ? lyric : "";
     const syllabicForPart = i === 0 ? syllabic : "";
+    const accidentalForPart = i === 0 ? accidentalText : null;
     out += renderSingleNote(
       note,
       spec.duration,
@@ -369,6 +404,7 @@ function renderNoteSegment(
       tieStop,
       lyricForPart,
       syllabicForPart,
+      accidentalForPart,
       options,
     );
   }
@@ -443,6 +479,7 @@ function renderVoiceLane(
   divisions: number,
   voiceNumber: number,
 ): string {
+  const accidentalState: AccidentalState = new Map();
   const measureStart = measure.startTick;
   const measureEnd = measure.startTick + measure.lengthTick;
   let cursor = measureStart;
@@ -453,7 +490,7 @@ function renderVoiceLane(
     }
     for (let i = 0; i < cluster.slices.length; i += 1) {
       const slice = cluster.slices[i];
-      out += renderNoteSegment(slice.note, slice.startTick, slice.endTick, divisions, voiceNumber, {
+      out += renderNoteSegment(slice.note, slice.startTick, slice.endTick, divisions, voiceNumber, accidentalState, {
         chord: i > 0,
         lyric: i === 0,
       });

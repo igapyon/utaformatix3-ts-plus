@@ -86,6 +86,28 @@ VSQX から MusicXML 生成後に、MusicXML パースまで通して簡易検�
 node scripts/validate-vsqx-to-musicxml.mjs <input.vsqx> [defaultLyric]
 ```
 
+VSQX fixture 一式を一括検証するスクリプト:
+
+```bash
+node scripts/validate-vsqx-fixtures.mjs [fixturesRoot] [defaultLyric]
+```
+
+VSQX fixture から MusicXML ゴールデンを更新・比較するスクリプト:
+
+```bash
+# 初回または意図した仕様変更時に更新
+node scripts/validate-vsqx-golden.mjs update [fixturesRoot] [goldenRoot] [defaultLyric]
+
+# 通常確認（差分があれば失敗）
+node scripts/validate-vsqx-golden.mjs check [fixturesRoot] [goldenRoot] [defaultLyric]
+```
+
+VSQX→MusicXML→再読込で主要情報（音高・長さ・歌詞・テンポ・拍子）を意味比較するスクリプト:
+
+```bash
+node scripts/validate-vsqx-semantics.mjs [fixturesRoot] [defaultLyric]
+```
+
 ## ライセンス
 
 [LICENSE](./LICENSE) を参照してください。
