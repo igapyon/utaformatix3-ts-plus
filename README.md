@@ -71,13 +71,14 @@
 - `src/converters` に双方向の入口を追加済み
   - `convertVsqxToMusicXml`
   - `convertMusicXmlToVsqx`
+  - `convertVsqxToMusicXml` では VSQX読込時に推定調号を `project.extras.musicxml.keyFifthsByTrack` として注入
 
 ## クイック変換（試験用）
 
 VSQX から MusicXML を試験変換するスクリプト:
 
 ```bash
-node scripts/quick-convert-vsqx-to-musicxml.mjs <input.vsqx> <output.musicxml> [defaultLyric]
+node scripts/quick-convert-vsqx-to-musicxml.mjs <input.vsqx> <output.musicxml> [defaultLyric] [keyFifths]
 ```
 
 VSQX から MusicXML 生成後に、MusicXML パースまで通して簡易検証するスクリプト:
@@ -113,6 +114,24 @@ MusicXML 出力の臨時記号ロジック（sharp/natural/小節リセット）
 ```bash
 node scripts/validate-musicxml-accidentals.mjs
 ```
+
+MusicXML 出力の調号指定ロジック（options / extras / 推定）を検証するスモークスクリプト:
+
+```bash
+node scripts/validate-musicxml-keyfifths.mjs
+```
+
+## API メモ（調号）
+
+`convertVsqxToMusicXml(..., { musicXml: ... })` / `MusicXmlAdapter.write(..., options)` の `options` で調号を制御できます。
+
+- `keyFifths: number` ですべてのトラックに固定調号を適用
+- `keyFifths: number[]` でトラックごとに調号を指定
+- `keyFifthsByMeasure: number[][]` でトラック・小節ごとに調号を指定
+- `estimateKeyFifthsByMeasure: boolean` で小節ごとの推定調号を有効化
+- `preferProjectExtras: true|false` で `project.extras` 由来設定の優先を制御
+  - `true`（デフォルト）: `options.keyFifths` 未指定時に `project.extras` を参照
+  - `false`: `project.extras` を無視して推定調号を使用
 
 ## ライセンス
 
