@@ -39,15 +39,16 @@ const project = {
 };
 
 try {
-  const xml = generateMusicXmlFromProject(project);
+  const neutralXml = generateMusicXmlFromProject(project);
+  const flatXml = generateMusicXmlFromProject(project, { keyFifths: -5 });
 
-  const sharpCount = (xml.match(/<accidental>sharp<\/accidental>/g) ?? []).length;
-  const naturalCount = (xml.match(/<accidental>natural<\/accidental>/g) ?? []).length;
-  const flatCount = (xml.match(/<accidental>flat<\/accidental>/g) ?? []).length;
+  const sharpCount = (neutralXml.match(/<accidental>sharp<\/accidental>/g) ?? []).length;
+  const naturalCount = (neutralXml.match(/<accidental>natural<\/accidental>/g) ?? []).length;
+  const flatCount = (flatXml.match(/<accidental>flat<\/accidental>/g) ?? []).length;
 
   // Expectations:
-  // note1 sharp, note2 natural, note3 sharp, note4 no accidental(same as previous),
-  // note5 sharp (new measure)
+  // neutral key: note1 sharp, note2 natural, note3 sharp, note4 no accidental, note5 sharp (new measure)
+  // flat key: descending case should be expressed with at least one flat accidental
   assert(sharpCount >= 1, `Expected at least 1 sharp accidental, got ${sharpCount}`);
   assert(naturalCount >= 1, `Expected at least 1 natural accidental, got ${naturalCount}`);
   assert(flatCount >= 1, `Expected at least 1 flat accidental, got ${flatCount}`);

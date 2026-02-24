@@ -3,7 +3,8 @@ import type { Project } from "../../upstream/utaformatix3-ts/src/core/model/Proj
 import type { Tempo } from "../../upstream/utaformatix3-ts/src/core/model/Tempo";
 import type { Track } from "../../upstream/utaformatix3-ts/src/core/model/Track";
 import type { TimeSignature } from "../../upstream/utaformatix3-ts/src/core/model/TimeSignature";
-import type { MusicXmlWriteOptions } from "./MusicXmlAdapter";
+import type { MusicXmlWriteOptions } from "./MusicXmlAdapter.ts";
+import { estimateMeasureKeyFifthsSequence, estimateTrackKeyFifths } from "./KeyFifthsEstimator.ts";
 
 type Measure = {
   index: number;
@@ -85,6 +86,39 @@ function unwrapCdata(value: string): string {
 
 function normalizeText(value: string): string {
   return unwrapCdata(String(value ?? ""));
+}
+
+function shouldInterpretHyphenAsSyllabic(japaneseLyricsType: string): boolean {
+  return japaneseLyricsType === "RomajiCv" || japaneseLyricsType === "RomajiVcv";
+}
+
+function resolveLyricAndSyllabic(
+  rawLyric: string,
+  options?: { interpretHyphenAsSyllabic?: boolean },
+): { lyric: string; syllabic: string } {
+  const normalized = normalizeText(rawLyric).trim();
+  if (!normalized) return { lyric: "", syllabic: "" };
+
+  const useHyphenRule = options?.interpretHyphenAsSyllabic ?? false;
+  if (!useHyphenRule) {
+    return { lyric: normalized, syllabic: "single" };
+  }
+
+  const beginsWithHyphen = normalized.startsWith("-");
+  const endsWithHyphen = normalized.endsWith("-");
+  const text = normalized.replace(/^-+/, "").replace(/-+$/, "").trim();
+  if (!text) return { lyric: "", syllabic: "" };
+
+  if (beginsWithHyphen && endsWithHyphen) {
+    return { lyric: text, syllabic: "middle" };
+  }
+  if (beginsWithHyphen) {
+    return { lyric: text, syllabic: "end" };
+  }
+  if (endsWithHyphen) {
+    return { lyric: text, syllabic: "begin" };
+  }
+  return { lyric: text, syllabic: "single" };
 }
 
 function buildDurationSpecs(divisions: number): DurationSpec[] {
@@ -200,53 +234,6 @@ function getPreviousAlterForPitch(pitch: SpelledPitch, context: SpellingContext)
   return defaultAlterFromFifths(pitch.step, context.keyFifths);
 }
 
-function estimateFifthsForTrack(track: Track): number {
-  if (track.notes.length === 0) return 0;
-  let bestFifths = 0;
-  let bestPenalty = Number.POSITIVE_INFINITY;
-  for (let fifths = -7; fifths <= 7; fifths += 1) {
-    let penalty = 0;
-    for (const note of track.notes) {
-      const pitch = toPitch(note.key);
-      const keyAlter = defaultAlterFromFifths(pitch.step, fifths);
-      penalty += Math.abs(pitch.alter - keyAlter);
-    }
-    if (penalty < bestPenalty) {
-      bestPenalty = penalty;
-      bestFifths = fifths;
-    }
-  }
-  return bestFifths;
-}
-
-function estimateFifthsForMeasure(trackNotes: Note[], measure: Measure, fallbackFifths: number): number {
-  const notes = trackNotes
-    .map((note) => ({
-      key: note.key,
-      duration: Math.max(0, Math.min(note.tickOff, measure.startTick + measure.lengthTick) - Math.max(note.tickOn, measure.startTick)),
-    }))
-    .filter((it) => it.duration > 0);
-  if (notes.length === 0) return clampFifths(fallbackFifths);
-
-  let bestFifths = clampFifths(fallbackFifths);
-  let bestPenalty = Number.POSITIVE_INFINITY;
-  for (let fifths = -7; fifths <= 7; fifths += 1) {
-    let penalty = 0;
-    for (const item of notes) {
-      const pitch = toPitch(item.key);
-      const keyAlter = defaultAlterFromFifths(pitch.step, fifths);
-      penalty += Math.abs(pitch.alter - keyAlter) * item.duration;
-    }
-    const distancePenalty = Math.abs(fifths - fallbackFifths) * 0.01;
-    const scoredPenalty = penalty + distancePenalty;
-    if (scoredPenalty < bestPenalty) {
-      bestPenalty = scoredPenalty;
-      bestFifths = fifths;
-    }
-  }
-  return clampFifths(bestFifths);
-}
-
 function toFiniteNumberOrUndefined(value: unknown): number | undefined {
   if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
   return value;
@@ -341,16 +328,15 @@ function resolveTrackKeyFifths(
     if (fromExtras !== undefined) return clampFifths(fromExtras);
   }
 
-  return clampFifths(estimateFifthsForTrack(track));
+  return clampFifths(estimateTrackKeyFifths(track.notes));
 }
 
 function resolveMeasureKeyFifths(
   project: Project,
   trackIndex: number,
   measureIndex: number,
-  trackNotes: Note[],
-  measure: Measure,
   baseTrackFifths: number,
+  estimatedByMeasure: number[] | null,
   options?: MusicXmlWriteOptions,
 ): number {
   const explicitTrackLevel = options?.keyFifths;
@@ -367,8 +353,11 @@ function resolveMeasureKeyFifths(
     const fromExtras = resolveMeasureFifthsFromExtras(project, trackIndex, measureIndex);
     if (fromExtras !== undefined) return clampFifths(fromExtras);
   }
-  if (options?.estimateKeyFifthsByMeasure) {
-    return estimateFifthsForMeasure(trackNotes, measure, baseTrackFifths);
+  if (estimatedByMeasure) {
+    const estimated = estimatedByMeasure[measureIndex];
+    if (typeof estimated === "number" && Number.isFinite(estimated)) {
+      return clampFifths(estimated);
+    }
   }
   return clampFifths(baseTrackFifths);
 }
@@ -386,6 +375,8 @@ function choosePitchSpelling(key: number, context: SpellingContext): SpelledPitc
     const pitch: SpelledPitch = { step: candidate.step, alter: candidate.alter, octave };
     const prevAlter = getPreviousAlterForPitch(pitch, context);
     const needsAccidental = prevAlter === candidate.alter ? 0 : 1;
+    const keyAlter = defaultAlterFromFifths(candidate.step, context.keyFifths);
+    const keyBias = Math.abs(candidate.alter - keyAlter) * 0.5;
     const directionBias =
       previousKey == null
         ? 0
@@ -401,7 +392,7 @@ function choosePitchSpelling(key: number, context: SpellingContext): SpelledPitc
     return {
       index,
       candidate,
-      score: needsAccidental + directionBias,
+      score: needsAccidental + keyBias + directionBias,
     };
   });
 
@@ -597,6 +588,7 @@ function renderSingleNote(
 }
 
 function renderNoteSegment(
+  project: Project,
   note: Note,
   startTick: number,
   endTick: number,
@@ -610,8 +602,14 @@ function renderNoteSegment(
   const extTieStop = startTick > note.tickOn;
   const isFirstSegment = startTick === note.tickOn;
   const includeLyric = options?.lyric ?? true;
-  const lyric = includeLyric && isFirstSegment ? escapeXml(normalizeText(note.lyric || "あ")) : "";
-  const syllabic = isFirstSegment ? (extTieStart ? "begin" : "single") : "";
+  const lyricToken =
+    includeLyric && isFirstSegment
+      ? resolveLyricAndSyllabic(note.lyric || "あ", {
+          interpretHyphenAsSyllabic: shouldInterpretHyphenAsSyllabic(project.japaneseLyricsType),
+        })
+      : { lyric: "", syllabic: "" };
+  const lyric = escapeXml(lyricToken.lyric);
+  const syllabic = lyricToken.syllabic;
   const pitch = choosePitchSpelling(note.key, spellingContext);
   const accidentalText = resolveAccidentalText(pitch, spellingContext, extTieStop);
   spellingContext.previousKey = note.key;
@@ -735,6 +733,7 @@ function assignVoices(clusters: NoteCluster[]): NoteCluster[][] {
 }
 
 function renderVoiceLane(
+  project: Project,
   clusters: NoteCluster[],
   measure: Measure,
   divisions: number,
@@ -756,7 +755,7 @@ function renderVoiceLane(
     }
     for (let i = 0; i < cluster.slices.length; i += 1) {
       const slice = cluster.slices[i];
-      out += renderNoteSegment(slice.note, slice.startTick, slice.endTick, divisions, voiceNumber, spellingContext, {
+      out += renderNoteSegment(project, slice.note, slice.startTick, slice.endTick, divisions, voiceNumber, spellingContext, {
         chord: i > 0,
         lyric: i === 0,
       });
@@ -782,12 +781,12 @@ function renderMeasureNotesWithKey(
     return renderRest(measure.lengthTick, 1, divisions);
   }
   if (lanes.length === 1) {
-    return renderVoiceLane(lanes[0], measure, divisions, 1, keyFifths);
+    return renderVoiceLane(project, lanes[0], measure, divisions, 1, keyFifths);
   }
 
   let out = "";
   for (let i = 0; i < lanes.length; i += 1) {
-    out += renderVoiceLane(lanes[i], measure, divisions, i + 1, keyFifths);
+    out += renderVoiceLane(project, lanes[i], measure, divisions, i + 1, keyFifths);
     if (i < lanes.length - 1) {
       out += `<backup><duration>${measure.lengthTick}</duration></backup>`;
     }
@@ -837,12 +836,30 @@ export function generateMusicXmlFromProject(project: Project, options?: MusicXml
       const clef = chooseClef(track);
       const trackKeyFifths = resolveTrackKeyFifths(project, track, index, options);
       const notes = [...track.notes].sort((a, b) => a.tickOn - b.tickOn || a.tickOff - b.tickOff);
+      const estimatedByMeasure =
+        options?.estimateKeyFifthsByMeasure
+          ? estimateMeasureKeyFifthsSequence(notes, measures, trackKeyFifths)
+          : null;
       const measuresXml = measures
         .map((measure, measureIndex) => {
-          const keyFifths = resolveMeasureKeyFifths(project, index, measureIndex, notes, measure, trackKeyFifths, options);
+          const keyFifths = resolveMeasureKeyFifths(
+            project,
+            index,
+            measureIndex,
+            trackKeyFifths,
+            estimatedByMeasure,
+            options,
+          );
           const previousKeyFifths =
             measureIndex > 0
-              ? resolveMeasureKeyFifths(project, index, measureIndex - 1, notes, measures[measureIndex - 1], trackKeyFifths, options)
+              ? resolveMeasureKeyFifths(
+                  project,
+                  index,
+                  measureIndex - 1,
+                  trackKeyFifths,
+                  estimatedByMeasure,
+                  options,
+                )
               : keyFifths;
           const hasKeyChange = measureIndex === 0 || keyFifths !== previousKeyFifths;
           const hasTimeSigChange = tsList.some((ts) => ts.measurePosition === measure.index);

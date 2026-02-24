@@ -18,13 +18,13 @@
 - [ ] VSQX パーサの対象仕様（バージョン・必須要素）を定義する
 - [ ] ノート、歌詞、テンポ、拍子、トラック構造の取り込みを安定化する
 - [x] VSQX読込時に推定調号を `project.extras.musicxml.keyFifthsByTrack` へ注入する
-- [ ] 異常入力時のエラー/警告ポリシーを定義する
+- [x] 異常入力時のエラー/警告ポリシーを定義する（`convertVsqxToMusicXmlWithReport` 追加、`importWarnings` 取り込み）
 
 ### 1-2. MusicXML 4.0 output 強化
 
 - [ ] MusicXML 4.0 出力の最小スキーマ方針を定義する（`mikuscore` 活用前提）
 - [ ] 音価・タイ・休符・テンポ指示・拍子の出力規則を確定する
-- [ ] 歌詞・音節（syllabic）出力方針を確定する
+- [x] 歌詞・音節（syllabic）出力方針を確定する（Romaji時のみハイフン規則 `begin/middle/end/single` を適用）
 - [x] 臨時記号（`<accidental>`）の基本出力と小節内状態管理を実装する
 - [x] 調号（`<key><fifths>`）の推定出力と臨時記号判定の連動を実装する
 - [ ] `mikuscore` の MusicXML I/O 呼び出しアダプタを試作する
@@ -35,10 +35,14 @@
 - [x] VSQX fixture を一括実行する簡易検証スクリプトを追加する（`scripts/validate-vsqx-fixtures.mjs`）
 - [x] `VSQX -> MusicXML` のゴールデン比較テストを追加する（`scripts/validate-vsqx-golden.mjs`）
 - [x] 主要情報（音高・長さ・歌詞・テンポ・拍子）の意味比較テストを追加する（`scripts/validate-vsqx-semantics.mjs`）
+- [x] 調号推定ロジックを共通モジュール化し converter / generator の挙動差を抑制する（`src/musicxml/KeyFifthsEstimator.ts`）
 - [x] 臨時記号（sharp/natural/小節リセット）のスモーク検証を追加する（`scripts/validate-musicxml-accidentals.mjs`）
 - [x] 調号適用優先順位（options / extras / 推定）のスモーク検証を追加する（`scripts/validate-musicxml-keyfifths.mjs`）
 - [x] 小節単位調号（`keyFifthsByMeasure`）のスモーク検証を追加する（`scripts/validate-musicxml-keyfifths.mjs`）
 - [x] 小節単位推定調号（`estimateKeyFifthsByMeasure`）のスモーク検証を追加する（`scripts/validate-musicxml-keyfifths.mjs`）
+- [x] 小節推定調号の安定化（弱い根拠では前小節維持）を実装しスモーク検証を追加する（`scripts/validate-musicxml-keyfifths.mjs`）
+- [x] 歌詞音節（`<syllabic>`）のスモーク検証を追加する（`scripts/validate-musicxml-lyrics.mjs`）
+- [x] VSQX変換の error/warning レポートAPI検証を追加する（`scripts/validate-vsqx-error-policy.mjs`）
 
 ## 2. Phase 2: MusicXML 4.0 Import -> VSQX Export
 

@@ -122,9 +122,35 @@ try {
     `Expected measure-level modulation estimate, got ${JSON.stringify(modulation)}`,
   );
 
+  const sparseAccidentalProject = {
+    ...baseProject,
+    extras: {},
+    tracks: [
+      {
+        id: 0,
+        name: 'Sparse Mod Track',
+        notes: [
+          { id: 101, key: 60, tickOn: 0, tickOff: 480, lyric: 'a' },
+          { id: 102, key: 64, tickOn: 480, tickOff: 960, lyric: 'a' },
+          { id: 103, key: 67, tickOn: 960, tickOff: 1440, lyric: 'a' },
+          { id: 104, key: 66, tickOn: 1920, tickOff: 2040, lyric: 'a' },
+        ],
+      },
+    ],
+  };
+  const xmlSparseAccidental = generateMusicXmlFromProject(sparseAccidentalProject, {
+    estimateKeyFifthsByMeasure: true,
+    preferProjectExtras: false,
+  });
+  const sparse = extractFifthsPerPart(xmlSparseAccidental);
+  assert(
+    sparse[0].length === 1 || (sparse[0].length >= 2 && sparse[0][0] === sparse[0][1]),
+    `Expected sparse accidental to keep previous key, got ${JSON.stringify(sparse)}`,
+  );
+
   console.log('KeyFifths validation OK');
   console.log(
-    `extras=${JSON.stringify(fromExtras)} noExtras=${JSON.stringify(noExtras)} global=${JSON.stringify(global)} perTrack=${JSON.stringify(perTrack)} perMeasure=${JSON.stringify(perMeasure)} modulation=${JSON.stringify(modulation)}`,
+    `extras=${JSON.stringify(fromExtras)} noExtras=${JSON.stringify(noExtras)} global=${JSON.stringify(global)} perTrack=${JSON.stringify(perTrack)} perMeasure=${JSON.stringify(perMeasure)} modulation=${JSON.stringify(modulation)} sparse=${JSON.stringify(sparse)}`,
   );
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);

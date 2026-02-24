@@ -1,12 +1,19 @@
-export { convertVsqxToMusicXml, convertMusicXmlToVsqx } from "./converters";
+export { convertVsqxToMusicXml, convertMusicXmlToVsqx } from "./converters/index.ts";
+export { convertVsqxToMusicXmlWithReport } from "./converters/index.ts";
 export {
   getMusicXmlAdapter,
   setMusicXmlAdapter,
   MikuscoreMusicXmlAdapter,
-} from "./musicxml";
+} from "./musicxml/index.ts";
 export type {
   MusicXmlAdapter,
   MusicXmlParseOptions,
   MusicXmlWriteMode,
   MusicXmlWriteOptions,
-} from "./musicxml";
+} from "./musicxml/index.ts";
+export type {
+  VsqxToMusicXmlIssue,
+  VsqxToMusicXmlIssueCode,
+  VsqxToMusicXmlIssueLevel,
+  VsqxToMusicXmlReport,
+} from "./converters/vsqxToMusicXml.ts";

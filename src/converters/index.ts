@@ -1,3 +1,2 @@
-export { convertVsqxToMusicXml } from "./vsqxToMusicXml";
-export { convertMusicXmlToVsqx } from "./musicXmlToVsqx";
-
+export { convertVsqxToMusicXml, convertVsqxToMusicXmlWithReport } from "./vsqxToMusicXml.ts";
+export { convertMusicXmlToVsqx } from "./musicXmlToVsqx.ts";
