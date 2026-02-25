@@ -78,6 +78,9 @@
   - `convertVsqxToMusicXml`
   - `convertMusicXmlToVsqx`
   - `convertVsqxToMusicXml` では VSQX読込時に推定調号を `project.extras.musicxml.keyFifthsByTrack` として注入
+- `MusicXML -> VSQX` では `MusicXmlAdapter.parse` で plus parser を優先利用
+  - `<backup>` / `<forward>` / `<chord>` / `<voice>` / `<staff>` を解釈してタイムラインを復元
+  - plus parser 経路（`extras.musicxml.parser = "plus"`）では legacy向け onset補正を適用しない
 - 調号推定ロジックは `src/musicxml/KeyFifthsEstimator.ts` に共通化済み（converter / generator で共有）
 - Phase 2 の `MusicXML -> VSQX` 仕様メモを `MUSICXML_TO_VSQX_SPEC.md` に追加済み
 - `VSQX -> MusicXML` 出力規則を `MUSICXML_OUTPUT_RULES.md` に追加済み
@@ -155,6 +158,18 @@ node scripts/validate-musicxml-staff-split.mjs
 node scripts/validate-mikuscore-adapter-hooks.mjs
 ```
 
+plus parser 経路の再import安定性（MusicXML -> VSQX -> MusicXML -> VSQX）検証:
+
+```bash
+node scripts/validate-musicxml-plus-parser-roundtrip.mjs [input.musicxml] [defaultLyric]
+```
+
+MusicXML 2パート最小fixtureの5小節目回帰（同時発音・音価保持）検証:
+
+```bash
+node scripts/validate-musicxml-m5-two-parts-regression.mjs [input.musicxml] [defaultLyric]
+```
+
 VSQX fixture から MusicXML ゴールデンを更新・比較するスクリプト:
 
 ```bash
@@ -222,8 +237,25 @@ MusicXML 出力の調号指定ロジック（options / extras / 推定）を検�
 node scripts/validate-musicxml-keyfifths.mjs
 ```
 
+## テスト戦略
+
+本プロジェクトは、次の3層テストを品質の中核とする。
+
+1. 通常テスト（単体/機能別）
+   - 変換ロジックやAPIの仕様単位の正しさを確認する
+2. roundtripテスト（往復変換）
+   - `VSQX -> MusicXML -> VSQX` / `MusicXML -> VSQX -> MusicXML` の劣化を継続監視する
+   - テキスト完全一致ではなく semantic 一致（fatal/important分類）を重視する
+3. 最小回帰fixtureテスト（1-2小節）
+   - 不具合が見つかるたびに「不具合のエッセンス」を抽出し、1-2小節の最小fixtureとして固定する
+   - 追加先は原則 `tests/fixtures/musicxml-regression/` とし、再発防止の回帰テストを常設化する
+
+この3層を継続運用することで、日常変更と設計改善の両方で品質低下を抑制する。
+
 ## 既知制約と回避策
 
+- `tests/artifacts/manual-convert/` のファイルは検証時の一時成果物として扱う
+  - 恒久回帰は `tests/fixtures/musicxml-regression/` に最小fixtureを追加して管理する
 - MusicXML `slur` / ornaments / articulation は現状未保持
   - 回避策: roundtripで必要な記号は現状利用を避けるか、変換後にDAW/エディタ側で再付与する
   - `convertMusicXmlToVsqxWithReport` では `MUSICXML_UNSUPPORTED_NOTATION` warning を返す

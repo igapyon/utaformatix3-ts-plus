@@ -2,6 +2,7 @@ import { parseMusicXml as parseLegacyMusicXml, writeMusicXml as writeLegacyMusic
 import type { Project } from "../../upstream/utaformatix3-ts/src/core/model/Project";
 import type { MusicXmlAdapter, MusicXmlParseOptions, MusicXmlWriteOptions } from "./MusicXmlAdapter.ts";
 import { getMikuscoreHooks } from "./MikuscoreHooks.ts";
+import { parseMusicXmlPlus } from "./ParseMusicXmlPlus.ts";
 import { generateMusicXmlFromProject } from "./ProjectToMusicXml.ts";
 
 function hasXmlDomRuntime(): boolean {
@@ -82,6 +83,11 @@ export class MikuscoreMusicXmlAdapter implements MusicXmlAdapter {
       } catch {
         // Fall back to built-in path for robustness.
       }
+    }
+    try {
+      return parseMusicXmlPlus(normalized, options);
+    } catch {
+      // Fall back to legacy parser for unsupported XML shapes.
     }
     return parseLegacyMusicXml(normalized, {
       defaultLyric: options?.defaultLyric,

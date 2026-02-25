@@ -285,6 +285,34 @@ function enrichProjectWithEstimatedMusicXmlKeyFifths(project: Project): Project 
   };
 }
 
+function extractVsqxPickupHint(vsqxText: string): number | undefined {
+  const match = vsqxText.match(/<!--\s*utaformatix3-ts-plus:firstMeasureActualTick=(\d+)\s*-->/);
+  if (!match) return undefined;
+  const value = Number(match[1]);
+  if (!Number.isFinite(value) || value <= 0) return undefined;
+  return Math.trunc(value);
+}
+
+function enrichProjectWithVsqxPickupHint(project: Project, firstMeasureActualTick: number | undefined): Project {
+  if (firstMeasureActualTick == null) return project;
+  const extrasBase = project.extras && typeof project.extras === "object" ? project.extras : {};
+  const extrasRecord = extrasBase as Record<string, unknown>;
+  const musicxmlBase =
+    extrasRecord.musicxml && typeof extrasRecord.musicxml === "object"
+      ? (extrasRecord.musicxml as Record<string, unknown>)
+      : {};
+  return {
+    ...project,
+    extras: {
+      ...extrasRecord,
+      musicxml: {
+        ...musicxmlBase,
+        firstMeasureActualTick,
+      },
+    },
+  };
+}
+
 function collectProjectWarnings(project: Project): VsqxToMusicXmlIssue[] {
   const issues: VsqxToMusicXmlIssue[] = [];
   for (const warning of project.importWarnings ?? []) {
@@ -356,6 +384,7 @@ export function convertVsqxToMusicXmlWithReport(vsqxText: string, options?: Vsqx
   const issues: VsqxToMusicXmlIssue[] = [];
   let parsed: Project;
   const defaultLyric = options?.defaultLyric ?? "あ";
+  const hintedFirstMeasureActualTick = extractVsqxPickupHint(vsqxText);
   try {
     parsed = parseVsqx(vsqxText, {
       defaultLyric,
@@ -373,7 +402,8 @@ export function convertVsqxToMusicXmlWithReport(vsqxText: string, options?: Vsqx
   issues.push(...collectProjectWarnings(parsed));
   const stabilized = stabilizeImportedVsqxProject(parsed, defaultLyric);
   issues.push(...stabilized.normalizedIssues);
-  const project = enrichProjectWithEstimatedMusicXmlKeyFifths(stabilized.project);
+  const pickupHinted = enrichProjectWithVsqxPickupHint(stabilized.project, hintedFirstMeasureActualTick);
+  const project = enrichProjectWithEstimatedMusicXmlKeyFifths(pickupHinted);
   try {
     const musicXml = getMusicXmlAdapter().write(project, options?.musicXml);
     return { musicXml, issues };

@@ -171,6 +171,29 @@ type RawPitchedEvent = {
   tickOff: number;
 };
 
+function extractFirstMeasureActualTickFromProject(project: Project): number | undefined {
+  const extras = project.extras;
+  if (!extras || typeof extras !== "object") return undefined;
+  const root = extras as Record<string, unknown>;
+  const musicxml =
+    root.musicxml && typeof root.musicxml === "object" ? (root.musicxml as Record<string, unknown>) : null;
+  const value = musicxml?.firstMeasureActualTick;
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  const normalized = Math.max(1, Math.trunc(value));
+  return normalized;
+}
+
+function injectVsqxPickupHint(vsqxText: string, firstMeasureActualTick: number | undefined): string {
+  if (!(typeof firstMeasureActualTick === "number" && Number.isFinite(firstMeasureActualTick) && firstMeasureActualTick > 0)) {
+    return vsqxText;
+  }
+  const hint = `<!--utaformatix3-ts-plus:firstMeasureActualTick=${Math.trunc(firstMeasureActualTick)}-->`;
+  if (/^<\?xml[^>]*\?>/.test(vsqxText)) {
+    return vsqxText.replace(/^<\?xml[^>]*\?>/, (m) => `${m}\n${hint}`);
+  }
+  return `${hint}\n${vsqxText}`;
+}
+
 function stepToSemitone(step: string): number {
   switch (step) {
     case "C":
@@ -300,6 +323,17 @@ function normalizeChordOnsetsFromSource(project: Project, musicXmlText: string):
   };
 }
 
+function shouldNormalizeChordOnsets(project: Project): boolean {
+  const extras = project.extras;
+  if (!extras || typeof extras !== "object") return true;
+  const root = extras as Record<string, unknown>;
+  const musicxml =
+    root.musicxml && typeof root.musicxml === "object" ? (root.musicxml as Record<string, unknown>) : null;
+  const parser = typeof musicxml?.parser === "string" ? musicxml.parser : null;
+  // plus parser already handles backup/forward/chord timeline and does not need legacy onset repair.
+  return parser !== "plus";
+}
+
 function splitTrackIntoMonophonicLanes(track: Track): Track[] {
   const sortedNotes = [...track.notes].sort((a, b) => a.tickOn - b.tickOn || a.tickOff - b.tickOff || a.key - b.key);
   if (sortedNotes.length <= 1) {
@@ -416,9 +450,17 @@ function collectProjectWarnings(project: Project): MusicXmlToVsqxIssue[] {
 
 function detectUnsupportedNotationIssues(xml: string): MusicXmlToVsqxIssue[] {
   const issues: MusicXmlToVsqxIssue[] = [];
+  const hasGrace = /<grace(\s|>|\/)/i.test(xml);
   const hasSlur = /<slur(\s|>|\/)/i.test(xml);
   const hasOrnaments = /<ornaments(\s|>|\/)/i.test(xml);
   const hasArticulations = /<articulations(\s|>|\/)/i.test(xml);
+  if (hasGrace) {
+    issues.push({
+      level: "warning",
+      code: "MUSICXML_UNSUPPORTED_NOTATION",
+      message: "MusicXML grace notes are not preserved in VSQX conversion.",
+    });
+  }
   if (hasSlur) {
     issues.push({
       level: "warning",
@@ -444,12 +486,14 @@ function detectUnsupportedNotationIssues(xml: string): MusicXmlToVsqxIssue[] {
 }
 
 function detectUnsupportedNotationSummary(xml: string): Record<string, number> | null {
+  const graceCount = (xml.match(/<grace(\s|>|\/)/gi) ?? []).length;
   const slurCount = (xml.match(/<slur(\s|>|\/)/gi) ?? []).length;
   const ornamentsCount = (xml.match(/<ornaments(\s|>|\/)/gi) ?? []).length;
   const articulationsCount = (xml.match(/<articulations(\s|>|\/)/gi) ?? []).length;
-  const total = slurCount + ornamentsCount + articulationsCount;
+  const total = graceCount + slurCount + ornamentsCount + articulationsCount;
   if (total === 0) return null;
   return {
+    graceCount,
     slurCount,
     ornamentsCount,
     articulationsCount,
@@ -535,7 +579,9 @@ export function convertMusicXmlToVsqxWithReport(
     return { vsqx: null, issues, retainedExtras: undefined };
   }
 
-  project = normalizeChordOnsetsFromSource(project, musicXmlText);
+  if (shouldNormalizeChordOnsets(project)) {
+    project = normalizeChordOnsetsFromSource(project, musicXmlText);
+  }
   if (options?.splitPartStaves === true) {
     project = splitTracksByPartAndStaff(project, musicXmlText);
   }
@@ -545,7 +591,9 @@ export function convertMusicXmlToVsqxWithReport(
   const normalized = normalizeProjectForVsqxExport(enriched);
   try {
     const result = writeVsqx(normalized);
-    return { vsqx: result.content, issues, retainedExtras: result.retainedExtras };
+    const firstMeasureActualTick = extractFirstMeasureActualTickFromProject(normalized);
+    const contentWithHint = injectVsqxPickupHint(result.content, firstMeasureActualTick);
+    return { vsqx: contentWithHint, issues, retainedExtras: result.retainedExtras };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     issues.push({

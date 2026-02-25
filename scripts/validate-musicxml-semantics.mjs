@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import { readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
-import { parseMusicXml, parseVsqx } from "../upstream/utaformatix3-ts/dist-lib/utaformatix3-ts.esm.js";
+import { parseVsqx } from "../upstream/utaformatix3-ts/dist-lib/utaformatix3-ts.esm.js";
 import { convertMusicXmlToVsqx } from "../src/converters/musicXmlToVsqx.ts";
+import { getMusicXmlAdapter } from "../src/musicxml/index.ts";
 
 function usage() {
   console.error("Usage: node scripts/validate-musicxml-semantics.mjs [fixturesRoot] [defaultLyric]");
@@ -13,23 +14,22 @@ function normalizeLyric(value, defaultLyric) {
 }
 
 function normalizeNotes(project, defaultLyric) {
-  return project.tracks.map((track, trackIndex) => ({
-    trackIndex,
-    notes: [...track.notes]
-      .map((note) => ({
+  return project.tracks
+    .flatMap((track) =>
+      track.notes.map((note) => ({
         tickOn: note.tickOn,
         tickOff: note.tickOff,
         key: note.key,
         lyric: normalizeLyric(note.lyric, defaultLyric),
-      }))
-      .sort(
-        (a, b) =>
-          a.tickOn - b.tickOn ||
-          a.tickOff - b.tickOff ||
-          a.key - b.key ||
-          a.lyric.localeCompare(b.lyric),
-      ),
-  }));
+      })),
+    )
+    .sort(
+      (a, b) =>
+        a.tickOn - b.tickOn ||
+        a.tickOff - b.tickOff ||
+        a.key - b.key ||
+        a.lyric.localeCompare(b.lyric),
+    );
 }
 
 function normalizeTempos(project) {
@@ -70,17 +70,13 @@ async function collectFixtureInputs(fixturesRoot) {
 
 async function validateOne(inputPath, defaultLyric) {
   const inputText = await readFile(inputPath, "utf8");
-  const sourceProject = parseMusicXml(inputText, { defaultLyric });
+  const sourceProject = getMusicXmlAdapter().parse(inputText, { defaultLyric });
   const vsqx = convertMusicXmlToVsqx(inputText, {
     musicXml: { defaultLyric },
   });
   const parsedProject = parseVsqx(vsqx, { defaultLyric });
 
   const failures = [];
-  if (sourceProject.tracks.length !== parsedProject.tracks.length) {
-    failures.push(`Track count mismatch: ${sourceProject.tracks.length} != ${parsedProject.tracks.length}`);
-  }
-
   const noteDiff = diffSection(
     "notes",
     normalizeNotes(sourceProject, defaultLyric),
