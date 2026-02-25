@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 
 const commands = [
   ["node", ["scripts/validate-vsqx-error-policy.mjs"]],
+  ["node", ["scripts/validate-vsqx-keyfifths-silence-policy.mjs"]],
   ["node", ["scripts/validate-vsqx-fixtures.mjs"]],
   ["node", ["scripts/validate-vsqx-golden.mjs", "check"]],
   ["node", ["scripts/validate-vsqx-semantics.mjs"]],
@@ -10,12 +11,13 @@ const commands = [
   ["node", ["scripts/validate-musicxml-unsupported-notation-policy.mjs"]],
   ["node", ["scripts/validate-musicxml-unsupported-notation-extras.mjs"]],
   ["node", ["scripts/validate-musicxml-chord-onset.mjs"]],
+  ["node", ["scripts/validate-musicxml-grandstaff-hysteresis.mjs"]],
   ["node", ["scripts/validate-mikuscore-adapter-hooks.mjs"]],
   ["node", ["scripts/validate-musicxml-golden.mjs", "check"]],
   ["node", ["scripts/validate-musicxml-semantics.mjs"]],
   ["node", ["scripts/validate-musicxml-staff-split.mjs"]],
-  ["node", ["scripts/validate-vsqx-roundtrip-diff.mjs", "upstream/utaformatix3-ts/tests/fixtures/vsqx", "あ", "check"]],
-  ["node", ["scripts/validate-musicxml-roundtrip-diff.mjs", "tests/fixtures/musicxml", "あ", "check"]],
+  ["node", ["scripts/validate-vsqx-roundtrip-diff.mjs", "upstream/utaformatix3-ts/tests/fixtures/vsqx", "ら", "check"]],
+  ["node", ["scripts/validate-musicxml-roundtrip-diff.mjs", "tests/fixtures/musicxml", "ら", "check"]],
 ];
 
 function runOne(cmd, args) {
