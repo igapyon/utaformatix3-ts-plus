@@ -56,6 +56,9 @@
 
 - [x] VSQX 出力の必須構造と既定値を定義する（`MUSICXML_TO_VSQX_SPEC.md`）
 - [x] Phase 1 と整合するデータ正規化ルールを適用する（`convertMusicXmlToVsqxWithReport` 内のfallback正規化）
+- [ ] 反復記号を含む入力向けに `repeat-preserve` / `playback-normalize` の2モード方針を設計する
+  - `repeat-preserve`: 反復記号（barline/repeat/ending/segno/coda）の構造維持を優先
+  - `playback-normalize`: VSQX互換の演奏時間軸（展開・変拍子吸収を含む）を優先
 
 ### 2-3. テスト
 

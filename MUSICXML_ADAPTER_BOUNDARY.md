@@ -29,10 +29,15 @@
 ## 4. 実装責務の分離
 
 - `MikuscoreMusicXmlAdapter`:
-  - デフォルト実装（upstream parser/writer + plus generator）
+  - デフォルト実装（upstream parser/writer + plus generator/plus parser）
   - グローバルフックによる外部委譲を許可
+  - parse優先順:
+    1. hook `parseMusicXmlToProject`
+    2. `parseMusicXmlPlus`（`<backup>/<forward>/<chord>/<voice>/<staff>` 対応）
+    3. upstream legacy parser（fallback）
 - converter層:
   - 失敗時のissue化、report API、フォールバック正規化を担当
+  - `convertMusicXmlToVsqx` は `extras.musicxml.parser = "plus"` のとき legacy向け onset補正を適用しない
 
 ## 5. フック境界（IIFE連携）
 
@@ -43,4 +48,3 @@
 - `writeProjectToMusicXml(project, options?)`
 
 失敗時は内部実装へフォールバックする（変換停止を避ける）。
-

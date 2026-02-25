@@ -41,6 +41,15 @@ type DurationSpec = {
   dots: number;
 };
 
+type NoteTypeRenderSpec = {
+  type: string;
+  dots: number;
+  timeModification?: {
+    actualNotes: number;
+    normalNotes: number;
+  };
+};
+
 type AccidentalState = Map<string, number>;
 type SpelledPitch = {
   step: string;
@@ -166,6 +175,53 @@ function noteTypeFromDuration(duration: number, divisions: number): { type: stri
   const spec = buildDurationSpecs(divisions).find((it) => it.duration === duration);
   if (spec) return { type: spec.type, dots: spec.dots };
   return null;
+}
+
+function noteTypeFromTupletDuration(
+  duration: number,
+  divisions: number,
+): { type: string; dots: 0; timeModification: { actualNotes: number; normalNotes: number } } | null {
+  const bases: Array<{ type: string; base: number }> = [
+    { type: "whole", base: divisions * 4 },
+    { type: "half", base: divisions * 2 },
+    { type: "quarter", base: divisions },
+    { type: "eighth", base: divisions / 2 },
+    { type: "16th", base: divisions / 4 },
+    { type: "32nd", base: divisions / 8 },
+    { type: "64th", base: divisions / 16 },
+    { type: "128th", base: divisions / 32 },
+  ];
+  const tuplets: Array<{ actualNotes: number; normalNotes: number }> = [
+    { actualNotes: 3, normalNotes: 2 },
+    { actualNotes: 5, normalNotes: 4 },
+    { actualNotes: 6, normalNotes: 4 },
+    { actualNotes: 7, normalNotes: 4 },
+    { actualNotes: 9, normalNotes: 8 },
+  ];
+  const normalizedDuration = Math.max(1, Math.trunc(duration));
+  for (const base of bases) {
+    if (!(base.base > 0) || !Number.isInteger(base.base)) continue;
+    for (const tuplet of tuplets) {
+      if ((base.base * tuplet.normalNotes) % tuplet.actualNotes !== 0) continue;
+      const tupletDuration = (base.base * tuplet.normalNotes) / tuplet.actualNotes;
+      if (tupletDuration !== normalizedDuration) continue;
+      return {
+        type: base.type,
+        dots: 0,
+        timeModification: {
+          actualNotes: tuplet.actualNotes,
+          normalNotes: tuplet.normalNotes,
+        },
+      };
+    }
+  }
+  return null;
+}
+
+function noteTypeRenderSpecFromDuration(duration: number, divisions: number): NoteTypeRenderSpec | null {
+  const plain = noteTypeFromDuration(duration, divisions);
+  if (plain) return plain;
+  return noteTypeFromTupletDuration(duration, divisions);
 }
 
 function decomposeDuration(duration: number, divisions: number): DurationSpec[] | null {
@@ -486,13 +542,26 @@ function normalizeTempos(projectTempos: Tempo[]): Tempo[] {
 function buildMeasures(project: Project, maxTick: number): Measure[] {
   const ppq = project.ppq > 0 ? project.ppq : 480;
   const tsList = sortTimeSignatures(project);
+  const firstMeasureActualTick = (() => {
+    const extras = project.extras;
+    if (!extras || typeof extras !== "object") return undefined;
+    const root = extras as Record<string, unknown>;
+    const musicxml = root.musicxml && typeof root.musicxml === "object" ? (root.musicxml as Record<string, unknown>) : null;
+    const value = musicxml?.firstMeasureActualTick;
+    if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+    const normalized = Math.max(1, Math.trunc(value));
+    const nominal = Math.max(1, ticksPerMeasure(ppq, getMeasureTimeSignature(0, tsList)));
+    if (normalized >= nominal) return undefined;
+    return normalized;
+  })();
   const measures: Measure[] = [];
   let startTick = 0;
   let index = 0;
   const hardLimit = 10000;
   while (startTick <= maxTick && index < hardLimit) {
     const ts = getMeasureTimeSignature(index, tsList);
-    const lengthTick = Math.max(1, ticksPerMeasure(ppq, ts));
+    const nominalLength = Math.max(1, ticksPerMeasure(ppq, ts));
+    const lengthTick = index === 0 && typeof firstMeasureActualTick === "number" ? firstMeasureActualTick : nominalLength;
     measures.push({ index, startTick, lengthTick, timeSignature: ts });
     startTick += lengthTick;
     index += 1;
@@ -644,7 +713,7 @@ function renderSingleNote(
   pitch: SpelledPitch,
   duration: number,
   voice: number,
-  noteType: { type: string; dots: number } | null,
+  noteType: NoteTypeRenderSpec | null,
   tieStart: boolean,
   tieStop: boolean,
   lyric: string,
@@ -662,7 +731,13 @@ function renderSingleNote(
     `<duration>${duration}</duration>` +
     `<voice>${voice}</voice>` +
     `${options?.staff ? `<staff>${options.staff}</staff>` : ""}` +
-    `${noteType ? `<type>${noteType.type}</type>${"<dot/>".repeat(noteType.dots)}` : ""}` +
+    `${noteType
+      ? `<type>${noteType.type}</type>${"<dot/>".repeat(noteType.dots)}${
+          noteType.timeModification
+            ? `<time-modification><actual-notes>${noteType.timeModification.actualNotes}</actual-notes><normal-notes>${noteType.timeModification.normalNotes}</normal-notes></time-modification>`
+            : ""
+        }`
+      : ""}` +
     `${tieStart ? `<tie type="start"/>` : ""}` +
     `${tieStop ? `<tie type="stop"/>` : ""}` +
     `${tieStart || tieStop ? `<notations>${tieStart ? `<tied type="start"/>` : ""}${tieStop ? `<tied type="stop"/>` : ""}</notations>` : ""}` +
@@ -704,7 +779,7 @@ function renderNoteSegment(
       pitch,
       duration,
       voice,
-      noteTypeFromDuration(duration, divisions),
+      noteTypeRenderSpecFromDuration(duration, divisions),
       extTieStart,
       extTieStop,
       lyric,
@@ -720,7 +795,7 @@ function renderNoteSegment(
       pitch,
       duration,
       voice,
-      noteTypeFromDuration(duration, divisions),
+      noteTypeRenderSpecFromDuration(duration, divisions),
       extTieStart,
       extTieStop,
       lyric,
