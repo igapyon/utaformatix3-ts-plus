@@ -124,7 +124,7 @@ if (fixturesRootArg === "--help" || fixturesRootArg === "-h") {
 }
 
 const fixturesRoot = resolve(fixturesRootArg ?? "tests/fixtures/musicxml");
-const defaultLyric = defaultLyricArg ?? "あ";
+const defaultLyric = defaultLyricArg ?? "ら";
 const mode = modeArg ?? "report";
 if (mode !== "report" && mode !== "check") {
   usage();

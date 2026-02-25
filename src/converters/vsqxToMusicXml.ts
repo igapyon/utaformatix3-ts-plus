@@ -89,6 +89,11 @@ function estimateTrackKeyFifthsByMeasure(trackNotes: Note[], measures: MeasureBo
   return estimateMeasureKeyFifthsSequence(trackNotes, measures, trackFifths);
 }
 
+function hasNoteInMeasure(trackNotes: Note[], measure: MeasureBoundary): boolean {
+  const measureEnd = measure.startTick + measure.lengthTick;
+  return trackNotes.some((note) => note.tickOff > measure.startTick && note.tickOn < measureEnd);
+}
+
 function normalizeTempoStream(input: Tempo[]): Tempo[] {
   const valid = input
     .filter((tempo) => Number.isFinite(tempo.tickPosition) && Number.isFinite(tempo.bpm) && tempo.bpm > 0)
@@ -223,12 +228,40 @@ function stabilizeImportedVsqxProject(project: Project, defaultLyric: string): {
 }
 
 function enrichProjectWithEstimatedMusicXmlKeyFifths(project: Project): Project {
-  const maxNoteTick = Math.max(0, ...project.tracks.flatMap((track) => track.notes.map((note) => note.tickOff)));
+  const allNotes = project.tracks.flatMap((track) => track.notes);
+  const maxNoteTick = Math.max(0, ...allNotes.map((note) => note.tickOff));
   const measures = buildMeasures(project, maxNoteTick);
-  const keyFifthsByTrack = project.tracks.map((track) => estimateTrackKeyFifths(track.notes));
-  const keyFifthsByMeasure = project.tracks.map((track, index) =>
-    estimateTrackKeyFifthsByMeasure(track.notes, measures, keyFifthsByTrack[index] ?? 0),
+  const globalTrackFifths = estimateTrackKeyFifths(allNotes);
+  const keyFifthsByTrack = project.tracks.map(() => globalTrackFifths);
+  const perTrackEstimatedByMeasure = project.tracks.map((track) =>
+    estimateTrackKeyFifthsByMeasure(track.notes, measures, globalTrackFifths),
   );
+  const globalEstimatedByMeasure = estimateTrackKeyFifthsByMeasure(allNotes, measures, globalTrackFifths);
+  const synchronizedByMeasure: number[] = [];
+  let previous = globalTrackFifths;
+  for (const [measureIndex, measure] of measures.entries()) {
+    const candidate = globalEstimatedByMeasure[measureIndex] ?? previous;
+    let allActiveTracksAgree = true;
+    let activeTrackCount = 0;
+    for (const [trackIndex, track] of project.tracks.entries()) {
+      if (!hasNoteInMeasure(track.notes, measure)) continue;
+      activeTrackCount += 1;
+      if ((perTrackEstimatedByMeasure[trackIndex]?.[measureIndex] ?? previous) !== candidate) {
+        allActiveTracksAgree = false;
+        break;
+      }
+    }
+    if (activeTrackCount === 0) {
+      synchronizedByMeasure.push(previous);
+      continue;
+    }
+    previous = allActiveTracksAgree ? candidate : previous;
+    synchronizedByMeasure.push(previous);
+  }
+  const hasGlobalModulation = synchronizedByMeasure.some((fifths) => fifths !== globalTrackFifths);
+  const keyFifthsByMeasure = hasGlobalModulation
+    ? project.tracks.map(() => [...synchronizedByMeasure])
+    : undefined;
   const extrasBase = project.extras && typeof project.extras === "object" ? project.extras : {};
   const extrasRecord = extrasBase as Record<string, unknown>;
   const musicxmlBase =
@@ -241,9 +274,12 @@ function enrichProjectWithEstimatedMusicXmlKeyFifths(project: Project): Project 
       ...extrasRecord,
       musicxml: {
         ...musicxmlBase,
+        keyFifths: globalTrackFifths,
         keyFifthsByTrack,
-        keyFifthsByMeasure,
-        keyFifthsSource: "estimated-from-vsqx-notes",
+        ...(keyFifthsByMeasure ? { keyFifthsByMeasure } : {}),
+        keyFifthsSource: hasGlobalModulation
+          ? "estimated-from-vsqx-notes-global-synchronized"
+          : "estimated-from-vsqx-notes-global-static",
       },
     },
   };
