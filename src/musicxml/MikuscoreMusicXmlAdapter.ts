@@ -28,7 +28,7 @@ function prettyPrintMusicXmlText(xml: string): string {
     const token = rawToken.trim();
     if (!token) continue;
     if (/^<\//.test(token)) indent = Math.max(0, indent - 1);
-    lines.push(`${" ".repeat(indent)}${token}`);
+    lines.push(`${"  ".repeat(indent)}${token}`);
     const isOpening = /^<[^!?/][^>]*>$/.test(token);
     const isSelfClosing = /\/>$/.test(token);
     if (isOpening && !isSelfClosing) indent += 1;
@@ -46,12 +46,12 @@ function normalizeForOutput(xml: string): string {
     }
   }
   if (!hasXmlDomRuntime()) {
-    return String(xml ?? "");
+    return prettyPrintMusicXmlText(String(xml ?? ""));
   }
   const normalized = String(xml ?? "");
   const doc = parseMusicXmlDocument(normalized);
   if (!doc) {
-    return normalized;
+    return prettyPrintMusicXmlText(normalized);
   }
   return prettyPrintMusicXmlText(serializeMusicXmlDocument(doc));
 }

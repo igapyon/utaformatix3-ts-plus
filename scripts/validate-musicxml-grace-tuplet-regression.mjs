@@ -69,27 +69,9 @@ async function main() {
   });
   assert(report.vsqx != null, "VSQX conversion failed.");
 
-  const graceWarnings = report.issues.filter(
-    (issue) => issue.code === "MUSICXML_UNSUPPORTED_NOTATION" && issue.message.toLowerCase().includes("grace"),
-  );
-  assert(graceWarnings.length >= 1, "Expected grace unsupported-notation warning.");
-
-  const extras = report.retainedExtras;
-  const unsupported =
-    extras &&
-    typeof extras.musicxml === "object" &&
-    extras.musicxml &&
-    typeof extras.musicxml.unsupportedNotations === "object" &&
-    extras.musicxml.unsupportedNotations
-      ? extras.musicxml.unsupportedNotations
-      : null;
-  assert(unsupported != null, "Expected retainedExtras.musicxml.unsupportedNotations.");
-  assert(
-    typeof unsupported.graceCount === "number" && unsupported.graceCount >= 2,
-    `Expected graceCount>=2, got ${String(unsupported.graceCount)}`,
-  );
-
   const roundtripXml = convertVsqxToMusicXml(report.vsqx, { defaultLyric });
+  const graceCount = (roundtripXml.match(/<grace(\s|>|\/)/g) ?? []).length;
+  assert(graceCount >= 2, `Expected grace note preservation (>=2), got ${graceCount}`);
   const tripletCount = (
     roundtripXml.match(
       /<time-modification>\s*<actual-notes>3<\/actual-notes>\s*<normal-notes>2<\/normal-notes>\s*<\/time-modification>/g,
@@ -106,7 +88,7 @@ async function main() {
   );
 
   console.log(
-    `MusicXML grace+tuplet regression validation OK: graceWarnings=${graceWarnings.length} tripletTimeMods=${tripletCount}`,
+    `MusicXML grace+tuplet regression validation OK: graceCount=${graceCount} tripletTimeMods=${tripletCount}`,
   );
 }
 
@@ -115,4 +97,3 @@ main().catch((error) => {
   console.error(`MusicXML grace+tuplet regression validation failed: ${message}`);
   process.exit(1);
 });
-
