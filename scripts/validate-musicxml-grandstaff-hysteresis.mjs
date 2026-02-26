@@ -32,11 +32,11 @@ try {
         id: 0,
         name: "Track 1",
         notes: [
-          { id: 1, key: 64, tickOn: 0, tickOff: 480, lyric: "a" }, // upper
-          { id: 2, key: 58, tickOn: 1920, tickOff: 2400, lyric: "a" }, // keep upper (>= A3)
-          { id: 3, key: 56, tickOn: 3840, tickOff: 4320, lyric: "a" }, // drop to lower
-          { id: 4, key: 61, tickOn: 5760, tickOff: 6240, lyric: "a" }, // keep lower (<= D4)
-          { id: 5, key: 63, tickOn: 7680, tickOff: 8160, lyric: "a" }, // back to upper
+          { id: 1, key: 66, tickOn: 0, tickOff: 480, lyric: "a" }, // upper
+          { id: 2, key: 56, tickOn: 1920, tickOff: 2400, lyric: "a" }, // keep upper (>= G3)
+          { id: 3, key: 54, tickOn: 3840, tickOff: 4320, lyric: "a" }, // drop to lower
+          { id: 4, key: 63, tickOn: 5760, tickOff: 6240, lyric: "a" }, // keep lower (<= E4)
+          { id: 5, key: 65, tickOn: 7680, tickOff: 8160, lyric: "a" }, // back to upper
         ],
       },
     ],

@@ -8,6 +8,7 @@ import type { Track } from "../../upstream/utaformatix3-ts/src/core/model/Track"
 import { getMusicXmlAdapter } from "../musicxml/index.ts";
 import type { MusicXmlWriteOptions } from "../musicxml/index.ts";
 import { estimateMeasureKeyFifthsSequence, estimateTrackKeyFifths } from "../musicxml/KeyFifthsEstimator.ts";
+import { decodeBase64ToUtf8 } from "../utils/base64.ts";
 
 export type VsqxToMusicXmlOptions = {
   defaultLyric?: string;
@@ -293,6 +294,31 @@ function extractVsqxPickupHint(vsqxText: string): number | undefined {
   return Math.trunc(value);
 }
 
+function extractVsqxNewSystemMeasuresHint(vsqxText: string): number[] | undefined {
+  const match = vsqxText.match(/<!--\s*utaformatix3-ts-plus:newSystemMeasures=([0-9,\s]+)\s*-->/);
+  if (!match) return undefined;
+  const values = match[1]
+    .split(",")
+    .map((token) => Number(token.trim()))
+    .filter((value) => Number.isFinite(value) && value > 0)
+    .map((value) => Math.trunc(value));
+  if (values.length === 0) return undefined;
+  return [...new Set(values)].sort((a, b) => a - b);
+}
+
+function extractVsqxPreservedNotationsHint(vsqxText: string): Array<Record<string, unknown>> | undefined {
+  const match = vsqxText.match(/<!--\s*utaformatix3-ts-plus:preservedNotations=([A-Za-z0-9+/=]+)\s*-->/);
+  if (!match) return undefined;
+  try {
+    const json = decodeBase64ToUtf8(match[1]);
+    const parsed = JSON.parse(json) as { version?: unknown; entries?: unknown };
+    if (parsed?.version !== 1 || !Array.isArray(parsed.entries)) return undefined;
+    return parsed.entries.filter((entry) => entry && typeof entry === "object") as Array<Record<string, unknown>>;
+  } catch {
+    return undefined;
+  }
+}
+
 function enrichProjectWithVsqxPickupHint(project: Project, firstMeasureActualTick: number | undefined): Project {
   if (firstMeasureActualTick == null) return project;
   const extrasBase = project.extras && typeof project.extras === "object" ? project.extras : {};
@@ -308,6 +334,49 @@ function enrichProjectWithVsqxPickupHint(project: Project, firstMeasureActualTic
       musicxml: {
         ...musicxmlBase,
         firstMeasureActualTick,
+      },
+    },
+  };
+}
+
+function enrichProjectWithVsqxNewSystemMeasures(project: Project, measureNumbers: number[] | undefined): Project {
+  if (!Array.isArray(measureNumbers) || measureNumbers.length === 0) return project;
+  const extrasBase = project.extras && typeof project.extras === "object" ? project.extras : {};
+  const extrasRecord = extrasBase as Record<string, unknown>;
+  const musicxmlBase =
+    extrasRecord.musicxml && typeof extrasRecord.musicxml === "object"
+      ? (extrasRecord.musicxml as Record<string, unknown>)
+      : {};
+  return {
+    ...project,
+    extras: {
+      ...extrasRecord,
+      musicxml: {
+        ...musicxmlBase,
+        newSystemMeasureNumbers: measureNumbers,
+      },
+    },
+  };
+}
+
+function enrichProjectWithPreservedNotations(
+  project: Project,
+  entries: Array<Record<string, unknown>> | undefined,
+): Project {
+  if (!Array.isArray(entries) || entries.length === 0) return project;
+  const extrasBase = project.extras && typeof project.extras === "object" ? project.extras : {};
+  const extrasRecord = extrasBase as Record<string, unknown>;
+  const musicxmlBase =
+    extrasRecord.musicxml && typeof extrasRecord.musicxml === "object"
+      ? (extrasRecord.musicxml as Record<string, unknown>)
+      : {};
+  return {
+    ...project,
+    extras: {
+      ...extrasRecord,
+      musicxml: {
+        ...musicxmlBase,
+        preservedNotations: entries,
       },
     },
   };
@@ -385,6 +454,8 @@ export function convertVsqxToMusicXmlWithReport(vsqxText: string, options?: Vsqx
   let parsed: Project;
   const defaultLyric = options?.defaultLyric ?? "あ";
   const hintedFirstMeasureActualTick = extractVsqxPickupHint(vsqxText);
+  const hintedNewSystemMeasures = extractVsqxNewSystemMeasuresHint(vsqxText);
+  const hintedPreservedNotations = extractVsqxPreservedNotationsHint(vsqxText);
   try {
     parsed = parseVsqx(vsqxText, {
       defaultLyric,
@@ -403,7 +474,9 @@ export function convertVsqxToMusicXmlWithReport(vsqxText: string, options?: Vsqx
   const stabilized = stabilizeImportedVsqxProject(parsed, defaultLyric);
   issues.push(...stabilized.normalizedIssues);
   const pickupHinted = enrichProjectWithVsqxPickupHint(stabilized.project, hintedFirstMeasureActualTick);
-  const project = enrichProjectWithEstimatedMusicXmlKeyFifths(pickupHinted);
+  const systemBreakHinted = enrichProjectWithVsqxNewSystemMeasures(pickupHinted, hintedNewSystemMeasures);
+  const notationHinted = enrichProjectWithPreservedNotations(systemBreakHinted, hintedPreservedNotations);
+  const project = enrichProjectWithEstimatedMusicXmlKeyFifths(notationHinted);
   try {
     const musicXml = getMusicXmlAdapter().write(project, options?.musicXml);
     return { musicXml, issues };

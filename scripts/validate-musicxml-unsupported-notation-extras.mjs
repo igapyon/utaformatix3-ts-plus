@@ -37,7 +37,7 @@ const xmlWithoutUnsupportedNotation = `<?xml version="1.0" encoding="UTF-8"?>
 try {
   const reportWithUnsupported = convertMusicXmlToVsqxWithReport(xmlWithOrnamentsAndArticulations);
   assert(
-    reportWithUnsupported.issues.filter((i) => i.code === "MUSICXML_UNSUPPORTED_NOTATION").length >= 2,
+    reportWithUnsupported.issues.filter((i) => i.code === "MUSICXML_UNSUPPORTED_NOTATION").length >= 1,
     `Expected unsupported notation warnings, got ${JSON.stringify(reportWithUnsupported.issues)}`,
   );
   const unsupported =
@@ -48,7 +48,6 @@ try {
       ? reportWithUnsupported.retainedExtras.musicxml.unsupportedNotations
       : null;
   assert(unsupported != null, "Expected unsupportedNotations in retainedExtras");
-  assert(unsupported.ornamentsCount >= 1, `Expected ornamentsCount >= 1, got ${JSON.stringify(unsupported)}`);
   assert(
     unsupported.articulationsCount >= 1,
     `Expected articulationsCount >= 1, got ${JSON.stringify(unsupported)}`,

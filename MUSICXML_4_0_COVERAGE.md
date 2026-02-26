@@ -39,7 +39,7 @@
 | `attributes/divisions` | Supported | 固定divisionsで出力 |
 | `attributes/time` | Supported | 拍子列を出力 |
 | `attributes/key/fifths` | Supported | options/extras/推定を適用 |
-| `attributes/clef` | Supported | トラック音域から自動選択 |
+| `attributes/clef` | Supported | 自動選択（単一譜表は `minKey>=G3` でト音維持、大譜表は `G3/E4` ヒステリシス閾値） |
 | `direction/sound@tempo` | Supported | テンポを出力 |
 | `direction/metronome` | Supported | テンポを併記出力 |
 | `accidental` | Supported | 小節内状態管理 + natural復帰 |
@@ -51,4 +51,3 @@
 - MusicXML 4.0 全要素の完全対応（装飾記号、表情記号、高度な notations）
 - slur / articulation / ornaments の意味保持
 - VSQX側に直対応しない記譜情報（clef/key など）の可逆保持
-

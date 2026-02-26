@@ -92,6 +92,7 @@ function parseMasterTrack(firstPartBlock: string): {
   timeSignatures: TimeSignature[];
   measureBorders: number[];
   firstMeasureActualTick?: number;
+  newSystemMeasureNumbers?: number[];
 } {
   const measureBlocks = extractTagBlocks(firstPartBlock, "measure");
   const firstMeasure = measureBlocks[0] ?? "";
@@ -185,12 +186,29 @@ function parseMasterTrack(firstPartBlock: string): {
     measureBorders.push(tick);
   }
 
+  const newSystemMeasureNumbers = (() => {
+    const values: number[] = [];
+    let fallbackNumber = 0;
+    for (const match of firstPartBlock.matchAll(/<measure\b([^>]*)>([\s\S]*?)<\/measure>/g)) {
+      fallbackNumber += 1;
+      const attr = match[1] ?? "";
+      const body = match[2] ?? "";
+      if (!/<print\b[^>]*\bnew-system="yes"/.test(body)) continue;
+      const measureNumberRaw = attr.match(/\bnumber="([^"]+)"/)?.[1];
+      const measureNumber = Number(measureNumberRaw ?? "");
+      values.push(Number.isFinite(measureNumber) ? Math.max(1, Math.trunc(measureNumber)) : fallbackNumber);
+    }
+    if (values.length === 0) return undefined;
+    return [...new Set(values)].sort((a, b) => a - b);
+  })();
+
   return {
     importTickRate,
     tempos: tempos.length > 0 ? tempos : [{ tickPosition: 0, bpm: 120 }],
     timeSignatures: timeSignatures.length > 0 ? timeSignatures : [{ measurePosition: 0, numerator: 4, denominator: 4 }],
     measureBorders,
     firstMeasureActualTick,
+    ...(newSystemMeasureNumbers ? { newSystemMeasureNumbers } : {}),
   };
 }
 
@@ -347,6 +365,9 @@ export function parseMusicXmlPlus(text: string, options?: MusicXmlParseOptions):
       musicxml: {
         parser: "plus",
         ...(typeof master.firstMeasureActualTick === "number" ? { firstMeasureActualTick: master.firstMeasureActualTick } : {}),
+        ...(Array.isArray(master.newSystemMeasureNumbers) && master.newSystemMeasureNumbers.length > 0
+          ? { newSystemMeasureNumbers: master.newSystemMeasureNumbers }
+          : {}),
         originalXml: text,
         preservedAt: new Date().toISOString(),
       },

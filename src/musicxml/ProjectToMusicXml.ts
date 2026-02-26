@@ -62,6 +62,22 @@ type SpellingContext = {
   keyFifths: number;
 };
 
+type PreservedGraceHint = {
+  step: string;
+  alter?: number;
+  octave: number;
+  slash?: boolean;
+  noteType?: string;
+};
+
+type PreservedNotationHint = {
+  track: number;
+  tickOn: number;
+  key: number;
+  graceBefore?: PreservedGraceHint[];
+  trill?: boolean;
+};
+
 const PITCH_CANDIDATES: ReadonlyArray<ReadonlyArray<{ step: string; alter: number }>> = [
   [{ step: "C", alter: 0 }],
   [{ step: "C", alter: 1 }, { step: "D", alter: -1 }],
@@ -78,10 +94,11 @@ const PITCH_CANDIDATES: ReadonlyArray<ReadonlyArray<{ step: string; alter: numbe
 ] as const;
 const STEPS_IN_SHARP_ORDER = ["F", "C", "G", "D", "A", "E", "B"] as const;
 const STEPS_IN_FLAT_ORDER = ["B", "E", "A", "D", "G", "C", "F"] as const;
+const VIOLIN_TREBLE_LOWEST_KEY = 55; // G3
 const STAFF_SPLIT_C4 = 60;
 const STAFF_SPLIT_B3 = 59;
-const UPPER_STAFF_HOLD_MIN = 57; // A3
-const LOWER_STAFF_HOLD_MAX = 62; // D4
+const UPPER_STAFF_HOLD_MIN = VIOLIN_TREBLE_LOWEST_KEY; // keep upper staff down to G3
+const LOWER_STAFF_HOLD_MAX = 64; // E4
 
 function escapeXml(value: string): string {
   return value
@@ -196,26 +213,40 @@ function noteTypeFromTupletDuration(
     { actualNotes: 5, normalNotes: 4 },
     { actualNotes: 6, normalNotes: 4 },
     { actualNotes: 7, normalNotes: 4 },
+    { actualNotes: 9, normalNotes: 4 },
     { actualNotes: 9, normalNotes: 8 },
   ];
   const normalizedDuration = Math.max(1, Math.trunc(duration));
+  let best:
+    | { type: string; dots: 0; timeModification: { actualNotes: number; normalNotes: number }; delta: number }
+    | null = null;
   for (const base of bases) {
-    if (!(base.base > 0) || !Number.isInteger(base.base)) continue;
+    if (!(base.base > 0) || !Number.isFinite(base.base)) continue;
     for (const tuplet of tuplets) {
-      if ((base.base * tuplet.normalNotes) % tuplet.actualNotes !== 0) continue;
       const tupletDuration = (base.base * tuplet.normalNotes) / tuplet.actualNotes;
-      if (tupletDuration !== normalizedDuration) continue;
-      return {
+      if (!Number.isFinite(tupletDuration) || tupletDuration <= 0) continue;
+      const delta = Math.abs(tupletDuration - normalizedDuration);
+      if (delta > 1) continue;
+      const candidate = {
         type: base.type,
         dots: 0,
         timeModification: {
           actualNotes: tuplet.actualNotes,
           normalNotes: tuplet.normalNotes,
         },
+        delta,
       };
+      if (!best || candidate.delta < best.delta) {
+        best = candidate;
+      }
     }
   }
-  return null;
+  if (!best) return null;
+  return {
+    type: best.type,
+    dots: 0,
+    timeModification: best.timeModification,
+  };
 }
 
 function noteTypeRenderSpecFromDuration(duration: number, divisions: number): NoteTypeRenderSpec | null {
@@ -271,6 +302,60 @@ function accidentalTextFromAlter(alter: number): string | null {
   if (normalized === -1) return "flat";
   if (normalized === -2) return "double-flat";
   return null;
+}
+
+function pitchToMidiKey(pitch: SpelledPitch): number {
+  const semitoneByStep: Record<string, number> = {
+    C: 0,
+    D: 2,
+    E: 4,
+    F: 5,
+    G: 7,
+    A: 9,
+    B: 11,
+  };
+  const semitone = semitoneByStep[pitch.step] ?? 0;
+  return (pitch.octave + 1) * 12 + semitone + Math.trunc(pitch.alter);
+}
+
+function stemTextForNote(pitch: SpelledPitch, noteType: NoteTypeRenderSpec | null): string | null {
+  if (!noteType) return null;
+  if (noteType.type === "whole") return null;
+  const key = pitchToMidiKey(pitch);
+  return key >= 71 ? "down" : "up";
+}
+
+function preservedNotationKey(tickOn: number, key: number): string {
+  return `${Math.trunc(tickOn)}:${Math.trunc(key)}`;
+}
+
+function normalizeGraceType(value: string | undefined): string {
+  const token = String(value ?? "").trim();
+  const allowed = new Set(["whole", "half", "quarter", "eighth", "16th", "32nd", "64th", "128th"]);
+  return allowed.has(token) ? token : "16th";
+}
+
+function renderGraceNotes(graces: PreservedGraceHint[] | undefined, voice: number, staff?: StaffNumber): string {
+  if (!Array.isArray(graces) || graces.length === 0) return "";
+  return graces
+    .map((grace) => {
+      const step = String(grace.step ?? "").trim();
+      const octave = Number(grace.octave);
+      if (!/^[A-G]$/.test(step) || !Number.isFinite(octave)) return "";
+      const alter = Number(grace.alter ?? 0);
+      const hasAlter = Number.isFinite(alter) && Math.trunc(alter) !== 0;
+      const slash = grace.slash === true ? ` slash="yes"` : "";
+      return (
+        `<note>` +
+        `<grace${slash}/>` +
+        `<pitch><step>${step}</step>${hasAlter ? `<alter>${Math.trunc(alter)}</alter>` : ""}<octave>${Math.trunc(octave)}</octave></pitch>` +
+        `<voice>${voice}</voice>` +
+        `${staff ? `<staff>${staff}</staff>` : ""}` +
+        `<type>${normalizeGraceType(grace.noteType)}</type>` +
+        `</note>`
+      );
+    })
+    .join("");
 }
 
 function pitchStateKey(pitch: SpelledPitch): string {
@@ -427,6 +512,20 @@ function resolveMeasureKeyFifths(
   return clampFifths(baseTrackFifths);
 }
 
+function resolveNewSystemMeasureNumberSet(project: Project): Set<number> {
+  const extras = project.extras;
+  if (!extras || typeof extras !== "object") return new Set<number>();
+  const root = extras as Record<string, unknown>;
+  const musicxml = root.musicxml && typeof root.musicxml === "object" ? (root.musicxml as Record<string, unknown>) : null;
+  const raw = musicxml?.newSystemMeasureNumbers;
+  if (!Array.isArray(raw)) return new Set<number>();
+  const values = raw
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value) && value > 0)
+    .map((value) => Math.trunc(value));
+  return new Set(values);
+}
+
 function choosePitchSpelling(key: number, context: SpellingContext): SpelledPitch {
   const normalized = ((Math.trunc(key) % 12) + 12) % 12;
   const octave = Math.floor(key / 12) - 1;
@@ -577,8 +676,12 @@ function chooseClef(track: Track): Clef {
   if (!track.notes.length) {
     return { sign: "G", line: 2 };
   }
-  const sorted = track.notes.map((note) => note.key).sort((a, b) => a - b);
-  const median = sorted[Math.floor(sorted.length / 2)] ?? 60;
+  const keys = track.notes.map((note) => note.key).sort((a, b) => a - b);
+  const minKey = keys[0] ?? 60;
+  if (minKey >= VIOLIN_TREBLE_LOWEST_KEY) {
+    return { sign: "G", line: 2 };
+  }
+  const median = keys[Math.floor(keys.length / 2)] ?? 60;
   if (median < 60) {
     return { sign: "F", line: 4 };
   }
@@ -642,6 +745,12 @@ function buildGrandStaffLayout(track: Track): StaffLayout {
       staffByNoteId.set(note.id, clusterStaff);
     }
     previousStaff = clusterStaff;
+  }
+
+  // If all notes ended up on a single staff, avoid forcing grand-staff output.
+  const assignedStaves = new Set(staffByNoteId.values());
+  if (!assignedStaves.has(1) || !assignedStaves.has(2)) {
+    return { useGrandStaff: false, staffByNoteId: new Map() };
   }
 
   return { useGrandStaff: true, staffByNoteId };
@@ -716,12 +825,17 @@ function renderSingleNote(
   noteType: NoteTypeRenderSpec | null,
   tieStart: boolean,
   tieStop: boolean,
+  hasTrill: boolean,
   lyric: string,
   syllabic: string,
   accidentalText: string | null,
   options?: { chord?: boolean; lyric?: boolean; staff?: StaffNumber },
 ): string {
   const isChordTone = options?.chord === true;
+  const stemText = stemTextForNote(pitch, noteType);
+  const tiedNotations = `${tieStart ? `<tied type="start"/>` : ""}${tieStop ? `<tied type="stop"/>` : ""}`;
+  const trillNotations = hasTrill ? `<ornaments><trill-mark/></ornaments>` : "";
+  const notationsXml = tiedNotations || trillNotations ? `<notations>${tiedNotations}${trillNotations}</notations>` : "";
 
   return (
     `<note>` +
@@ -738,9 +852,10 @@ function renderSingleNote(
             : ""
         }`
       : ""}` +
+    `${stemText ? `<stem>${stemText}</stem>` : ""}` +
     `${tieStart ? `<tie type="start"/>` : ""}` +
     `${tieStop ? `<tie type="stop"/>` : ""}` +
-    `${tieStart || tieStop ? `<notations>${tieStart ? `<tied type="start"/>` : ""}${tieStop ? `<tied type="stop"/>` : ""}</notations>` : ""}` +
+    `${notationsXml}` +
     `${lyric ? `<lyric>${syllabic ? `<syllabic>${syllabic}</syllabic>` : ""}<text>${lyric}</text></lyric>` : ""}` +
     `</note>`
   );
@@ -754,6 +869,7 @@ function renderNoteSegment(
   divisions: number,
   voice: number,
   spellingContext: SpellingContext,
+  preservedDecoration: PreservedNotationHint | undefined,
   options?: { chord?: boolean; lyric?: boolean; staff?: StaffNumber },
 ): string {
   const duration = Math.max(1, endTick - startTick);
@@ -782,6 +898,7 @@ function renderNoteSegment(
       noteTypeRenderSpecFromDuration(duration, divisions),
       extTieStart,
       extTieStop,
+      false,
       lyric,
       syllabic,
       accidentalText,
@@ -791,6 +908,7 @@ function renderNoteSegment(
 
   const specs = decomposeDuration(duration, divisions);
   if (!specs || specs.length <= 1) {
+    const hasTrill = Boolean(preservedDecoration?.trill) && startTick === note.tickOn;
     return renderSingleNote(
       pitch,
       duration,
@@ -798,6 +916,7 @@ function renderNoteSegment(
       noteTypeRenderSpecFromDuration(duration, divisions),
       extTieStart,
       extTieStop,
+      hasTrill,
       lyric,
       syllabic,
       accidentalText,
@@ -820,6 +939,7 @@ function renderNoteSegment(
       { type: spec.type, dots: spec.dots },
       tieStart,
       tieStop,
+      false,
       lyricForPart,
       syllabicForPart,
       accidentalForPart,
@@ -898,6 +1018,7 @@ function renderVoiceLane(
   divisions: number,
   voiceNumber: number,
   keyFifths: number,
+  preservedByKey: Map<string, PreservedNotationHint>,
   staff?: StaffNumber,
 ): string {
   const spellingContext: SpellingContext = {
@@ -915,7 +1036,14 @@ function renderVoiceLane(
     }
     for (let i = 0; i < cluster.slices.length; i += 1) {
       const slice = cluster.slices[i];
-      out += renderNoteSegment(project, slice.note, slice.startTick, slice.endTick, divisions, voiceNumber, spellingContext, {
+      const preserved =
+        i === 0 && slice.startTick === slice.note.tickOn
+          ? preservedByKey.get(preservedNotationKey(slice.note.tickOn, slice.note.key))
+          : undefined;
+      if (i === 0 && preserved?.graceBefore?.length) {
+        out += renderGraceNotes(preserved.graceBefore, voiceNumber, staff);
+      }
+      out += renderNoteSegment(project, slice.note, slice.startTick, slice.endTick, divisions, voiceNumber, spellingContext, preserved, {
         chord: i > 0,
         lyric: i === 0,
         staff,
@@ -935,6 +1063,7 @@ function renderMeasureNotesForStaff(
   measure: Measure,
   keyFifths: number,
   voiceStart: number,
+  preservedByKey: Map<string, PreservedNotationHint>,
   staff?: StaffNumber,
 ): string {
   const divisions = project.ppq > 0 ? project.ppq : 480;
@@ -944,12 +1073,12 @@ function renderMeasureNotesForStaff(
     return renderRest(measure.lengthTick, voiceStart, divisions, staff);
   }
   if (lanes.length === 1) {
-    return renderVoiceLane(project, lanes[0], measure, divisions, voiceStart, keyFifths, staff);
+    return renderVoiceLane(project, lanes[0], measure, divisions, voiceStart, keyFifths, preservedByKey, staff);
   }
 
   let out = "";
   for (let i = 0; i < lanes.length; i += 1) {
-    out += renderVoiceLane(project, lanes[i], measure, divisions, voiceStart + i, keyFifths, staff);
+    out += renderVoiceLane(project, lanes[i], measure, divisions, voiceStart + i, keyFifths, preservedByKey, staff);
     if (i < lanes.length - 1) {
       out += `<backup><duration>${measure.lengthTick}</duration></backup>`;
     }
@@ -962,16 +1091,51 @@ function renderMeasureNotesWithKey(
   trackNotes: Note[],
   measure: Measure,
   keyFifths: number,
+  preservedByKey: Map<string, PreservedNotationHint>,
   layout?: StaffLayout,
 ): string {
   if (!layout?.useGrandStaff) {
-    return renderMeasureNotesForStaff(project, trackNotes, measure, keyFifths, 1);
+    return renderMeasureNotesForStaff(project, trackNotes, measure, keyFifths, 1, preservedByKey);
   }
   const upper = trackNotes.filter((note) => layout.staffByNoteId.get(note.id) !== 2);
   const lower = trackNotes.filter((note) => layout.staffByNoteId.get(note.id) === 2);
-  const upperXml = renderMeasureNotesForStaff(project, upper, measure, keyFifths, 1, 1);
-  const lowerXml = renderMeasureNotesForStaff(project, lower, measure, keyFifths, 10, 2);
+  const upperXml = renderMeasureNotesForStaff(project, upper, measure, keyFifths, 1, preservedByKey, 1);
+  const lowerXml = renderMeasureNotesForStaff(project, lower, measure, keyFifths, 10, preservedByKey, 2);
   return `${upperXml}<backup><duration>${measure.lengthTick}</duration></backup>${lowerXml}`;
+}
+
+function resolvePreservedNotationsByTrack(project: Project): Array<Map<string, PreservedNotationHint>> {
+  const byTrack = project.tracks.map(() => new Map<string, PreservedNotationHint>());
+  const extras = project.extras;
+  if (!extras || typeof extras !== "object") return byTrack;
+  const root = extras as Record<string, unknown>;
+  const musicxml = root.musicxml && typeof root.musicxml === "object" ? (root.musicxml as Record<string, unknown>) : null;
+  const raw = musicxml?.preservedNotations;
+  if (!Array.isArray(raw)) return byTrack;
+
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const row = entry as Record<string, unknown>;
+    const track = Number(row.track);
+    const tickOn = Number(row.tickOn);
+    const key = Number(row.key);
+    if (!Number.isFinite(track) || !Number.isFinite(tickOn) || !Number.isFinite(key)) continue;
+    const trackIndex = Math.trunc(track);
+    if (trackIndex < 0 || trackIndex >= byTrack.length) continue;
+    const graceBefore = Array.isArray(row.graceBefore)
+      ? (row.graceBefore.filter((g) => g && typeof g === "object") as PreservedGraceHint[])
+      : undefined;
+    const trill = row.trill === true;
+    if (!graceBefore?.length && !trill) continue;
+    byTrack[trackIndex].set(preservedNotationKey(tickOn, key), {
+      track: trackIndex,
+      tickOn: Math.trunc(tickOn),
+      key: Math.trunc(key),
+      ...(graceBefore?.length ? { graceBefore } : {}),
+      ...(trill ? { trill: true } : {}),
+    });
+  }
+  return byTrack;
 }
 
 function renderFinalBarline(isLastMeasure: boolean): string {
@@ -1005,6 +1169,8 @@ export function generateMusicXmlFromProject(project: Project, options?: MusicXml
   );
   const maxTick = Math.max(maxNoteTick, maxTempoTick, maxTimeSigTick);
   const measures = buildMeasures(project, maxTick);
+  const newSystemMeasureNumbers = resolveNewSystemMeasureNumberSet(project);
+  const preservedByTrack = resolvePreservedNotationsByTrack(project);
 
   const partList = tracks
     .map((track, index) => {
@@ -1021,6 +1187,7 @@ export function generateMusicXmlFromProject(project: Project, options?: MusicXml
       const clef = chooseClef(track);
       const staffLayout = buildGrandStaffLayout(track);
       const trackKeyFifths = resolveTrackKeyFifths(project, track, index, options);
+      const trackPreserved = preservedByTrack[index] ?? new Map<string, PreservedNotationHint>();
       const notes = [...track.notes].sort((a, b) => a.tickOn - b.tickOn || a.tickOff - b.tickOff);
       const estimatedByMeasure =
         options?.estimateKeyFifthsByMeasure
@@ -1051,11 +1218,14 @@ export function generateMusicXmlFromProject(project: Project, options?: MusicXml
           const hasTimeSigChange = tsList.some((ts) => ts.measurePosition === measure.index);
           const needsAttributes = measure.index === 0 || hasTimeSigChange || hasKeyChange;
           const isLastMeasure = measureIndex === measures.length - 1;
+          const exportedMeasureNumber = measureNumberBase + measure.index;
+          const includeNewSystemPrint = index === 0 && newSystemMeasureNumbers.has(exportedMeasureNumber);
           return (
-            `<measure number="${measureNumberBase + measure.index}">` +
+            `<measure number="${exportedMeasureNumber}">` +
+            `${includeNewSystemPrint ? `<print new-system="yes"/>` : ""}` +
             `${needsAttributes ? renderAttributes(measure, ppq, clef, keyFifths, measure.index === 0 || hasTimeSigChange, { grandStaff: staffLayout.useGrandStaff }) : ""}` +
             `${renderTempoDirections(measure, partTempos)}` +
-            `${renderMeasureNotesWithKey(project, notes, measure, keyFifths, staffLayout)}` +
+            `${renderMeasureNotesWithKey(project, notes, measure, keyFifths, trackPreserved, staffLayout)}` +
             `${renderFinalBarline(isLastMeasure)}` +
             `</measure>`
           );
